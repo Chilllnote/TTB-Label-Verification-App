@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TTB Label Verification</title>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; margin: 24px; }
+    .status { margin-top: 16px; padding: 16px; border: 1px solid #ccc; background: #f8f8f8; }
+    .ok { color: green; }
+    .error { color: darkred; }
+  </style>
+</head>
+<body>
+  <h1>TTB Label Verification</h1>
+  <p>This page fetches the backend health endpoint.</p>
+  <button id="check">Check backend health</button>
+  <div id="result" class="status">Click the button to verify the backend.</div>
+
+  <script>
+    const result = document.getElementById('result');
+    const button = document.getElementById('check');
+
+    async function checkHealth() {
+      result.textContent = 'Checking...';
+      result.className = 'status';
+
+      try {
+        const response = await fetch('/health');
+        const data = await response.json();
+
+        if (response.ok) {
+          result.textContent = `Backend health: ${data.status}`;
+          result.classList.add('ok');
+        } else {
+          result.textContent = `Health check failed: ${response.status}`;
+          result.classList.add('error');
+        }
+      } catch (error) {
+        result.textContent = `Error contacting backend: ${error.message}`;
+        result.classList.add('error');
+      }
+    }
+
+    button.addEventListener('click', checkHealth);
+    checkHealth();
+  </script>
+</body>
+</html>
