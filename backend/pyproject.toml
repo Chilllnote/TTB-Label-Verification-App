@@ -1,0 +1,15 @@
+[project]
+name = "ttb-label-verification-app"
+version = "0.1.0"
+description = "Minimal FastAPI backend for the TTB Label Verification proof-of-concept."
+requires-python = ">=3.12,<4.0"
+readme = "../README.md"
+license = { text = "MIT" }
+dependencies = [
+    "fastapi>=0.115.0,<0.116.0",
+    "uvicorn[standard]>=0.23.0,<0.24.0"
+]
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
