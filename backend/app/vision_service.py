@@ -11,7 +11,6 @@ import os
 from abc import ABC, abstractmethod
 from typing import Optional
 
-from openai import APIConnectionError, OpenAI, RateLimitError, Timeout
 from pydantic import ValidationError
 
 from app.models import ExtractedLabel
@@ -49,7 +48,9 @@ class OpenAIVisionService(VisionService):
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
             raise ValueError("OPENAI_API_KEY environment variable not set")
-        self.client = OpenAI(api_key=api_key, timeout=4.5)
+        from openai import AsyncOpenAI
+
+        self.client = AsyncOpenAI(api_key=api_key, timeout=4.5)
     
     async def extract(self, image_bytes: bytes) -> ExtractedLabel:
         """Extract label fields from image using GPT-4o.
@@ -92,7 +93,7 @@ class OpenAIVisionService(VisionService):
             )
             
             # Call GPT-4o with explicit JSON schema
-            response = self.client.chat.completions.create(
+            response = await self.client.chat.completions.create(
                 model="gpt-4o",
                 messages=[
                     {"role": "system", "content": system_prompt},
@@ -143,16 +144,6 @@ class OpenAIVisionService(VisionService):
             logger.info(f"Extracted label: {extracted}")
             return extracted
             
-        except (APIConnectionError, Timeout) as e:
-            logger.error(f"Vision API network error (timeout={isinstance(e, Timeout)}): {e}")
-            return ExtractedLabel(brand=None, product_class=None, producer=None,
-                                country=None, abv=None, net_contents=None,
-                                government_warning=None)
-        except RateLimitError as e:
-            logger.error(f"Vision API rate limited: {e}")
-            return ExtractedLabel(brand=None, product_class=None, producer=None,
-                                country=None, abv=None, net_contents=None,
-                                government_warning=None)
         except ValidationError as e:
             logger.error(f"Malformed extraction JSON (Pydantic validation failed): {e}")
             return ExtractedLabel(brand=None, product_class=None, producer=None,
@@ -164,7 +155,13 @@ class OpenAIVisionService(VisionService):
                                 country=None, abv=None, net_contents=None,
                                 government_warning=None)
         except Exception as e:
-            logger.error(f"Unexpected vision service error: {e}")
+            error_name = e.__class__.__name__
+            if error_name in {"APIConnectionError", "Timeout"}:
+                logger.error(f"Vision API network error ({error_name}): {e}")
+            elif error_name == "RateLimitError":
+                logger.error(f"Vision API rate limited: {e}")
+            else:
+                logger.error(f"Unexpected vision service error: {e}")
             return ExtractedLabel(brand=None, product_class=None, producer=None,
                                 country=None, abv=None, net_contents=None,
                                 government_warning=None)

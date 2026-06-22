@@ -56,3 +56,30 @@ class VerificationResult(BaseModel):
     summary: str
     failed_fields: Optional[list[str]] = None
     latency_ms: float
+
+
+class BatchSummary(BaseModel):
+    """Summary counts for a batch verification run."""
+
+    total: int
+    passed: int
+    needs_review: int
+    errors: int
+
+
+class BatchItemResult(BaseModel):
+    """Result for one item in a batch verification run."""
+
+    index: int
+    filename: str
+    status: Literal["PASS", "NEEDS_REVIEW", "ERROR"]
+    result: Optional[VerificationResult] = None
+    error: Optional[str] = None
+
+
+class BatchVerificationResult(BaseModel):
+    """Overall response for batch verification."""
+
+    summary: BatchSummary
+    results: list[BatchItemResult]
+    latency_ms: float
