@@ -3,47 +3,696 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>TTB Label Verification</title>
+  <title>Label Check</title>
   <style>
-    body { font-family: Arial, sans-serif; line-height: 1.6; margin: 24px; }
-    .status { margin-top: 16px; padding: 16px; border: 1px solid #ccc; background: #f8f8f8; }
-    .ok { color: green; }
-    .error { color: darkred; }
+    :root {
+      color-scheme: light;
+      --bg: #f7f7f4;
+      --panel: #ffffff;
+      --text: #171717;
+      --muted: #4b5563;
+      --line: #b8b8ad;
+      --focus: #064e8a;
+      --approved: #166534;
+      --approved-bg: #e7f6ea;
+      --review: #9a3412;
+      --review-bg: #fff0db;
+      --fail-bg: #fff1f2;
+      --fail-line: #b91c1c;
+      --button: #0b4f71;
+      --button-hover: #073c56;
+      --button-disabled: #737373;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 20px;
+      line-height: 1.45;
+    }
+
+    main {
+      width: min(100%, 980px);
+      margin: 0 auto;
+      padding: 28px 18px 48px;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: clamp(2.25rem, 6vw, 4rem);
+      line-height: 1.05;
+      letter-spacing: 0;
+    }
+
+    h2 {
+      margin: 0;
+      font-size: 1.55rem;
+      letter-spacing: 0;
+    }
+
+    p {
+      margin: 0;
+    }
+
+    .intro {
+      margin-bottom: 26px;
+      color: var(--muted);
+      font-size: 1.2rem;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 2px solid var(--line);
+      border-radius: 8px;
+      padding: 22px;
+      margin-top: 18px;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .field.full {
+      grid-column: 1 / -1;
+    }
+
+    label {
+      font-size: 1.15rem;
+      font-weight: 700;
+    }
+
+    input,
+    textarea,
+    button {
+      font: inherit;
+    }
+
+    input[type="text"],
+    input[type="file"],
+    textarea {
+      width: 100%;
+      min-height: 54px;
+      border: 2px solid #6b7280;
+      border-radius: 6px;
+      background: #fff;
+      color: var(--text);
+      padding: 12px 14px;
+    }
+
+    input[type="file"] {
+      padding: 10px;
+    }
+
+    textarea {
+      min-height: 130px;
+      resize: vertical;
+    }
+
+    input:focus,
+    textarea:focus,
+    button:focus {
+      outline: 4px solid var(--focus);
+      outline-offset: 3px;
+    }
+
+    .chosen-file {
+      min-height: 32px;
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    .primary-action {
+      width: 100%;
+      min-height: 70px;
+      margin-top: 22px;
+      border: 0;
+      border-radius: 6px;
+      background: var(--button);
+      color: #fff;
+      cursor: pointer;
+      font-size: 1.45rem;
+      font-weight: 800;
+    }
+
+    .primary-action:hover:not(:disabled) {
+      background: var(--button-hover);
+    }
+
+    .primary-action:disabled {
+      background: var(--button-disabled);
+      cursor: not-allowed;
+    }
+
+    .message {
+      display: none;
+      margin-top: 18px;
+      border: 3px solid #7f1d1d;
+      border-radius: 8px;
+      background: #fff1f2;
+      color: #7f1d1d;
+      padding: 16px;
+      font-weight: 800;
+    }
+
+    .message.show {
+      display: block;
+    }
+
+    .loading {
+      display: none;
+      margin-top: 18px;
+      border: 3px solid #92400e;
+      border-radius: 8px;
+      background: #fffbeb;
+      color: #78350f;
+      padding: 16px;
+      font-weight: 800;
+    }
+
+    .loading.show {
+      display: block;
+    }
+
+    .results {
+      display: none;
+    }
+
+    .results.show {
+      display: block;
+    }
+
+    .verdict {
+      border-radius: 8px;
+      padding: 24px;
+      margin-bottom: 18px;
+      border: 4px solid currentColor;
+    }
+
+    .verdict.approved {
+      color: var(--approved);
+      background: var(--approved-bg);
+    }
+
+    .verdict.review {
+      color: var(--review);
+      background: var(--review-bg);
+    }
+
+    .verdict-title {
+      display: block;
+      font-size: clamp(2.25rem, 7vw, 4.75rem);
+      line-height: 1;
+      font-weight: 900;
+      letter-spacing: 0;
+    }
+
+    .verdict-copy {
+      margin-top: 10px;
+      color: var(--text);
+      font-size: 1.25rem;
+      font-weight: 700;
+    }
+
+    .result-list {
+      display: grid;
+      gap: 12px;
+    }
+
+    .result-row {
+      border: 2px solid var(--line);
+      border-left-width: 10px;
+      border-radius: 8px;
+      background: #fff;
+      padding: 16px;
+    }
+
+    .result-row.pass {
+      border-left-color: var(--approved);
+    }
+
+    .result-row.fail {
+      border-color: var(--fail-line);
+      border-left-color: var(--fail-line);
+      background: var(--fail-bg);
+    }
+
+    .result-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      margin-bottom: 10px;
+    }
+
+    .result-name {
+      font-size: 1.25rem;
+      font-weight: 900;
+    }
+
+    .badge {
+      flex: 0 0 auto;
+      border-radius: 999px;
+      padding: 8px 14px;
+      color: #fff;
+      font-size: 1.05rem;
+      font-weight: 900;
+    }
+
+    .badge.pass {
+      background: var(--approved);
+    }
+
+    .badge.fail {
+      background: var(--fail-line);
+    }
+
+    .value-line {
+      margin-top: 6px;
+      overflow-wrap: anywhere;
+    }
+
+    .value-label {
+      font-weight: 900;
+    }
+
+    .reason {
+      margin-top: 12px;
+      font-weight: 900;
+    }
+
+    .detail {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 1rem;
+    }
+
+    .time {
+      margin-top: 16px;
+      color: var(--muted);
+      font-size: 1rem;
+      font-weight: 700;
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    @media (max-width: 760px) {
+      body {
+        font-size: 18px;
+      }
+
+      main {
+        padding: 18px 12px 36px;
+      }
+
+      .panel {
+        padding: 16px;
+      }
+
+      .form-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .result-head {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .badge {
+        border-radius: 6px;
+      }
+    }
   </style>
 </head>
 <body>
-  <h1>TTB Label Verification</h1>
-  <p>This page fetches the backend health endpoint.</p>
-  <button id="check">Check backend health</button>
-  <div id="result" class="status">Click the button to verify the backend.</div>
+  <main>
+    <h1>Label Check</h1>
+    <p class="intro">Choose a label photo, fill in the boxes, and check the result.</p>
+
+    <section class="panel" aria-labelledby="form-title">
+      <h2 id="form-title">Check one label</h2>
+      <form id="label-form" novalidate>
+        <div class="form-grid">
+          <div class="field full">
+            <label for="image">Choose Label Photo</label>
+            <input id="image" name="image" type="file" accept="image/jpeg,image/png,.jpg,.jpeg,.png" />
+            <div id="chosen-file" class="chosen-file" aria-live="polite">No photo chosen yet.</div>
+          </div>
+
+          <div class="field">
+            <label for="brand">Brand</label>
+            <input id="brand" name="brand" type="text" autocomplete="off" />
+          </div>
+
+          <div class="field">
+            <label for="product-class">Class or Type</label>
+            <input id="product-class" name="product_class" type="text" autocomplete="off" />
+          </div>
+
+          <div class="field">
+            <label for="producer">Producer</label>
+            <input id="producer" name="producer" type="text" autocomplete="off" />
+          </div>
+
+          <div class="field">
+            <label for="country">Country</label>
+            <input id="country" name="country" type="text" autocomplete="off" />
+          </div>
+
+          <div class="field">
+            <label for="abv">Alcohol %</label>
+            <input id="abv" name="abv" type="text" autocomplete="off" />
+          </div>
+
+          <div class="field">
+            <label for="net-contents">Bottle Size</label>
+            <input id="net-contents" name="net_contents" type="text" autocomplete="off" />
+          </div>
+
+          <div class="field full">
+            <label for="government-warning">Government Warning</label>
+            <textarea id="government-warning" name="government_warning"></textarea>
+          </div>
+        </div>
+
+        <button id="submit-button" class="primary-action" type="submit">Check Label</button>
+        <div id="error-message" class="message" role="alert"></div>
+        <div id="loading-message" class="loading" role="status" aria-live="polite">Checking the label now.</div>
+      </form>
+    </section>
+
+    <section id="results" class="panel results" aria-live="polite" aria-labelledby="results-title">
+      <h2 id="results-title" class="sr-only">Results</h2>
+      <div id="verdict" class="verdict"></div>
+      <div id="result-list" class="result-list"></div>
+      <div id="time" class="time"></div>
+    </section>
+  </main>
 
   <script>
-    const result = document.getElementById('result');
-    const button = document.getElementById('check');
+    const form = document.getElementById('label-form');
+    const imageInput = document.getElementById('image');
+    const chosenFile = document.getElementById('chosen-file');
+    const submitButton = document.getElementById('submit-button');
+    const errorMessage = document.getElementById('error-message');
+    const loadingMessage = document.getElementById('loading-message');
+    const results = document.getElementById('results');
+    const verdict = document.getElementById('verdict');
+    const resultList = document.getElementById('result-list');
+    const time = document.getElementById('time');
 
-    async function checkHealth() {
-      result.textContent = 'Checking...';
-      result.className = 'status';
+    const fields = [
+      { key: 'brand', label: 'Brand', element: document.getElementById('brand') },
+      { key: 'class', label: 'Class or Type', element: document.getElementById('product-class') },
+      { key: 'producer', label: 'Producer', element: document.getElementById('producer') },
+      { key: 'country', label: 'Country', element: document.getElementById('country') },
+      { key: 'abv', label: 'Alcohol %', element: document.getElementById('abv') },
+      { key: 'net_contents', label: 'Bottle Size', element: document.getElementById('net-contents') },
+      { key: 'government_warning', label: 'Government Warning', element: document.getElementById('government-warning') },
+    ];
 
-      try {
-        const response = await fetch('/health');
-        const data = await response.json();
+    const fieldLabels = {
+      brand: 'Brand',
+      product_class: 'Class or Type',
+      producer: 'Producer',
+      country: 'Country',
+      abv: 'Alcohol %',
+      net_contents: 'Bottle Size',
+      government_warning: 'Government Warning',
+    };
 
-        if (response.ok) {
-          result.textContent = `Backend health: ${data.status}`;
-          result.classList.add('ok');
-        } else {
-          result.textContent = `Health check failed: ${response.status}`;
-          result.classList.add('error');
-        }
-      } catch (error) {
-        result.textContent = `Error contacting backend: ${error.message}`;
-        result.classList.add('error');
-      }
+    const orderedFieldNames = [
+      'brand',
+      'product_class',
+      'producer',
+      'country',
+      'abv',
+      'net_contents',
+      'government_warning',
+    ];
+
+    function escapeHtml(value) {
+      return String(value ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
     }
 
-    button.addEventListener('click', checkHealth);
-    checkHealth();
+    function hasImage() {
+      return imageInput.files && imageInput.files.length > 0;
+    }
+
+    function hasAllFields() {
+      return fields.every((field) => field.element.value.trim().length > 0);
+    }
+
+    function setBusy(isBusy) {
+      imageInput.disabled = isBusy;
+      fields.forEach((field) => {
+        field.element.disabled = isBusy;
+      });
+      submitButton.disabled = isBusy;
+      submitButton.textContent = isBusy ? 'Checking...' : 'Check Label';
+      loadingMessage.classList.toggle('show', isBusy);
+    }
+
+    function updateReadyState() {
+      submitButton.disabled = false;
+    }
+
+    function showError(message) {
+      errorMessage.textContent = message;
+      errorMessage.classList.add('show');
+    }
+
+    function clearError() {
+      errorMessage.textContent = '';
+      errorMessage.classList.remove('show');
+    }
+
+    function clearResults() {
+      results.classList.remove('show');
+      verdict.className = 'verdict';
+      verdict.innerHTML = '';
+      resultList.innerHTML = '';
+      time.textContent = '';
+    }
+
+    function readProblem(responseBody, statusCode) {
+      const detail = responseBody && responseBody.detail ? String(responseBody.detail) : '';
+      const lowerDetail = detail.toLowerCase();
+
+      if (lowerDetail.includes('invalid image format')) {
+        return 'Please choose a JPG or PNG image.';
+      }
+
+      if (lowerDetail.includes('too large')) {
+        return 'Please choose an image under 5 MB.';
+      }
+
+      if (lowerDetail.includes('empty')) {
+        return 'The photo is empty. Please choose another label photo.';
+      }
+
+      if (lowerDetail.includes('application_data') || lowerDetail.includes('missing required fields')) {
+        return 'Please fill in all seven boxes.';
+      }
+
+      if (statusCode >= 500) {
+        return 'The label checker had a problem. Please try again.';
+      }
+
+      return detail || 'Something went wrong while checking the label. Please try again.';
+    }
+
+    function plainReason(result) {
+      const message = String(result.message || '').toLowerCase();
+
+      if (message.includes('missing') || !result.extracted) {
+        return 'The label checker could not find this on the label.';
+      }
+
+      if (result.field_name === 'government_warning') {
+        return 'The government warning must match exactly, including capital letters, punctuation, and spacing.';
+      }
+
+      return 'The value found on the label does not match the expected value.';
+    }
+
+    function buildPayload() {
+      const data = {};
+      fields.forEach((field) => {
+        data[field.key] = field.element.value.trim();
+      });
+      return data;
+    }
+
+    function renderResults(data) {
+      const isApproved = data.overall_status === 'PASS';
+      const title = isApproved ? 'APPROVED' : 'NEEDS REVIEW';
+      const copy = isApproved
+        ? 'All fields matched.'
+        : 'One or more fields need a closer look.';
+
+      verdict.className = `verdict ${isApproved ? 'approved' : 'review'}`;
+      verdict.innerHTML = `
+        <span class="verdict-title">${title}</span>
+        <p class="verdict-copy">${copy}</p>
+      `;
+
+      const byName = new Map((data.field_results || []).map((result) => [result.field_name, result]));
+      resultList.innerHTML = orderedFieldNames.map((fieldName) => {
+        const result = byName.get(fieldName);
+        const label = fieldLabels[fieldName] || fieldName;
+
+        if (!result) {
+          return `
+            <article class="result-row fail">
+              <div class="result-head">
+                <div class="result-name">${escapeHtml(label)}</div>
+                <div class="badge fail">FAIL</div>
+              </div>
+              <p class="reason">This result was not returned. Please try again.</p>
+            </article>
+          `;
+        }
+
+        const didPass = result.status === 'PASS';
+        const expected = escapeHtml(result.expected || '');
+        const found = escapeHtml(result.extracted || 'Not found');
+        const detail = result.message ? `<p class="detail">${escapeHtml(result.message)}</p>` : '';
+
+        if (didPass) {
+          return `
+            <article class="result-row pass">
+              <div class="result-head">
+                <div class="result-name">${escapeHtml(label)}</div>
+                <div class="badge pass">PASS</div>
+              </div>
+              <p class="value-line"><span class="value-label">Found on Label:</span> ${found}</p>
+            </article>
+          `;
+        }
+
+        return `
+          <article class="result-row fail">
+            <div class="result-head">
+              <div class="result-name">${escapeHtml(label)}</div>
+              <div class="badge fail">FAIL</div>
+            </div>
+            <p class="reason">${escapeHtml(plainReason(result))}</p>
+            <p class="value-line"><span class="value-label">Expected:</span> ${expected || 'Blank'}</p>
+            <p class="value-line"><span class="value-label">Found on Label:</span> ${found}</p>
+            ${detail}
+          </article>
+        `;
+      }).join('');
+
+      if (typeof data.latency_ms === 'number') {
+        time.textContent = `Checked in ${(data.latency_ms / 1000).toFixed(1)} seconds.`;
+      } else {
+        time.textContent = '';
+      }
+
+      results.classList.add('show');
+      results.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    imageInput.addEventListener('change', () => {
+      const file = imageInput.files && imageInput.files[0];
+      chosenFile.textContent = file ? `Chosen photo: ${file.name}` : 'No photo chosen yet.';
+      clearError();
+      updateReadyState();
+    });
+
+    fields.forEach((field) => {
+      field.element.addEventListener('input', () => {
+        clearError();
+        updateReadyState();
+      });
+    });
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      clearError();
+      clearResults();
+
+      if (!hasImage()) {
+        showError('Please choose a label photo.');
+        updateReadyState();
+        return;
+      }
+
+      if (!hasAllFields()) {
+        showError('Please fill in all seven boxes.');
+        updateReadyState();
+        return;
+      }
+
+      const file = imageInput.files[0];
+      const formData = new FormData();
+      formData.append('image', file);
+      formData.append('application_data', JSON.stringify(buildPayload()));
+
+      setBusy(true);
+
+      try {
+        const response = await fetch('/verify', {
+          method: 'POST',
+          body: formData,
+        });
+
+        let data = null;
+        try {
+          data = await response.json();
+        } catch (error) {
+          data = null;
+        }
+
+        if (!response.ok) {
+          showError(readProblem(data, response.status));
+          return;
+        }
+
+        if (!data || !Array.isArray(data.field_results) || !data.overall_status) {
+          showError('Something went wrong while checking the label. Please try again.');
+          return;
+        }
+
+        renderResults(data);
+      } catch (error) {
+        showError('The label checker could not be reached. Please try again.');
+      } finally {
+        setBusy(false);
+      }
+    });
+
+    updateReadyState();
   </script>
 </body>
 </html>
