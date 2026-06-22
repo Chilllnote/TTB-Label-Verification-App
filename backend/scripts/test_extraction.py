@@ -6,7 +6,7 @@ Usage:
     USE_MOCK_VISION=true python scripts/test_extraction.py
     
     # With real OpenAI API (requires OPENAI_API_KEY)
-    OPENAI_API_KEY=sk-... python scripts/test_extraction.py <image_path>
+    OPENAI_API_KEY=<OPENAI_API_KEY> python scripts/test_extraction.py <image_path>
     
     # Create sample test image
     python scripts/test_extraction.py --create-sample

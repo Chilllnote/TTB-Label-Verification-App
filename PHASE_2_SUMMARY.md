@@ -179,7 +179,7 @@ USE_MOCK_VISION=true python scripts/test_extraction.py scripts/sample_label.jpg
 **Run with real OpenAI API:**
 
 ```bash
-export OPENAI_API_KEY=sk-...
+export OPENAI_API_KEY=<OPENAI_API_KEY>
 python scripts/test_extraction.py <image_path>
 ```
 
