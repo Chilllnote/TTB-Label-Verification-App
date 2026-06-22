@@ -9,6 +9,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
@@ -22,9 +23,10 @@ from app.models import (
     BatchItemResult,
     BatchSummary,
     BatchVerificationResult,
+    LatencyMetrics,
     VerificationResult,
 )
-from app.preprocessing import preprocess_image
+from app.preprocessing import inspect_image, preprocess_image
 from app.vision_service import MockVisionService, OpenAIVisionService, VisionService
 
 logger = logging.getLogger(__name__)
@@ -33,6 +35,7 @@ MAX_IMAGE_BYTES = 5 * 1024 * 1024
 MAX_BATCH_SIZE = 5
 DEFAULT_BATCH_CONCURRENCY = 3
 ALLOWED_IMAGE_TYPES = ("image/jpeg", "image/png")
+SINGLE_LABEL_BUDGET_MS = 5000.0
 
 # Initialize FastAPI app
 app = FastAPI(title="TTB Label Verification App")
@@ -49,6 +52,15 @@ def get_vision_service() -> VisionService:
 # Mount static files and frontend
 frontend_dir = Path(__file__).resolve().parents[2] / "frontend"
 app.mount("/static", StaticFiles(directory=str(frontend_dir)), name="frontend")
+
+
+@app.exception_handler(RequestValidationError)
+async def request_validation_exception_handler(request, exc):
+    """Return plain user-safe messages for missing multipart/form fields."""
+    return JSONResponse(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        content={"detail": "Please choose a label photo and fill in all required fields."},
+    )
 
 
 @app.on_event("startup")
@@ -90,7 +102,7 @@ def _parse_application_data(raw_json: str) -> ApplicationData:
 
     try:
         return ApplicationData.model_validate_json(raw_json)
-    except (ValidationError, json.JSONDecodeError):
+    except (ValidationError, json.JSONDecodeError, ValueError):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid application_data JSON or missing required fields.",
@@ -120,11 +132,28 @@ def _parse_batch_application_data(raw_json: str) -> list[ApplicationData]:
 
     try:
         return [ApplicationData.model_validate(item) for item in raw_items]
-    except ValidationError:
+    except (ValidationError, ValueError):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid application_data JSON or missing required fields.",
         )
+
+
+def _env_int(name: str, default: int, minimum: int, maximum: int) -> int:
+    raw_value = os.getenv(name, str(default))
+    try:
+        value = int(raw_value)
+    except ValueError:
+        value = default
+    return min(maximum, max(minimum, value))
+
+
+def _preprocess_max_dimension() -> int:
+    return _env_int("PREPROCESS_MAX_DIMENSION", 768, 320, 1600)
+
+
+def _preprocess_jpeg_quality() -> int:
+    return _env_int("PREPROCESS_JPEG_QUALITY", 75, 50, 90)
 
 
 async def _verify_uploaded_label(
@@ -133,6 +162,10 @@ async def _verify_uploaded_label(
     vision_service: VisionService,
 ) -> VerificationResult:
     start_time = time.perf_counter()
+    metrics = LatencyMetrics(
+        vision_service=vision_service.__class__.__name__,
+        vision_model=getattr(vision_service, "model_name", None),
+    )
 
     if image.content_type not in ALLOWED_IMAGE_TYPES:
         raise HTTPException(
@@ -140,7 +173,11 @@ async def _verify_uploaded_label(
             detail=f"Invalid image format: {image.content_type}. Expected JPEG or PNG.",
         )
 
+    read_start = time.perf_counter()
     image_bytes = await image.read()
+    metrics.upload_read_ms = round((time.perf_counter() - read_start) * 1000, 1)
+    metrics.original_bytes = len(image_bytes)
+
     if not image_bytes:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -153,19 +190,54 @@ async def _verify_uploaded_label(
             detail="Image file too large. Maximum allowed size is 5 MB.",
         )
 
-    preprocessed_bytes = preprocess_image(image_bytes)
+    validate_start = time.perf_counter()
+    try:
+        image_info = inspect_image(image_bytes)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
+    metrics.image_validate_ms = round((time.perf_counter() - validate_start) * 1000, 1)
+    metrics.image_width = image_info.width
+    metrics.image_height = image_info.height
+    metrics.image_format = image_info.format
+
+    preprocess_start = time.perf_counter()
+    preprocessed_bytes = preprocess_image(
+        image_bytes,
+        max_dimension=_preprocess_max_dimension(),
+        jpeg_quality=_preprocess_jpeg_quality(),
+    )
+    metrics.preprocess_ms = round((time.perf_counter() - preprocess_start) * 1000, 1)
+    metrics.preprocessed_bytes = len(preprocessed_bytes)
+    try:
+        preprocessed_info = inspect_image(preprocessed_bytes)
+        metrics.preprocessed_width = preprocessed_info.width
+        metrics.preprocessed_height = preprocessed_info.height
+        metrics.preprocessed_format = preprocessed_info.format
+    except ValueError:
+        logger.warning("Preprocessed image could not be inspected; continuing with original validation result")
+
+    vision_start = time.perf_counter()
     extracted_label = await vision_service.extract(preprocessed_bytes)
+    metrics.vision_ms = round((time.perf_counter() - vision_start) * 1000, 1)
+
+    compare_start = time.perf_counter()
     verification_result = verify_label(application_data_model, extracted_label)
+    metrics.compare_ms = round((time.perf_counter() - compare_start) * 1000, 1)
 
     latency_ms = round((time.perf_counter() - start_time) * 1000, 1)
+    metrics.total_latency_ms = latency_ms
     verification_result.latency_ms = latency_ms
+    verification_result.metrics = metrics
 
     logger.info(
         "Verification completed in %.1fms status=%s",
         latency_ms,
         verification_result.overall_status,
     )
-    if latency_ms > 5000:
+    if latency_ms > SINGLE_LABEL_BUDGET_MS:
         logger.warning("Verification latency exceeded 5 second budget: %.1fms", latency_ms)
 
     return verification_result
@@ -185,6 +257,10 @@ def _plain_item_error(exc: HTTPException) -> str:
     lower_detail = detail.lower()
     if "invalid image format" in lower_detail:
         return "Please choose a JPG or PNG image."
+    if "could not be read" in lower_detail:
+        return "Please choose a clear JPG or PNG image."
+    if "dimensions are too large" in lower_detail:
+        return "Please choose a smaller photo."
     if "too large" in lower_detail:
         return "Please choose an image under 5 MB."
     if "empty" in lower_detail:

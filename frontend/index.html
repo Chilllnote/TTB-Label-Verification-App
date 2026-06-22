@@ -163,6 +163,12 @@
       outline-offset: 3px;
     }
 
+    input[aria-invalid="true"],
+    textarea[aria-invalid="true"] {
+      border-color: var(--fail-line);
+      background: var(--fail-bg);
+    }
+
     .chosen-file {
       min-height: 32px;
       color: var(--muted);
@@ -227,6 +233,10 @@
     .results,
     .hidden {
       display: none;
+    }
+
+    [hidden] {
+      display: none !important;
     }
 
     .batch-list {
@@ -471,53 +481,53 @@
     <p class="intro">Choose label photos, fill in the boxes, and check the result.</p>
 
     <div class="mode-switch" role="tablist" aria-label="Choose label check type">
-      <button id="single-mode" class="mode-button active" type="button">One Label</button>
-      <button id="batch-mode" class="mode-button" type="button">Batch</button>
+      <button id="single-mode" class="mode-button active" type="button" role="tab" aria-selected="true" aria-controls="single-panel">One Label</button>
+      <button id="batch-mode" class="mode-button" type="button" role="tab" aria-selected="false" aria-controls="batch-panel" tabindex="-1">Batch</button>
     </div>
 
-    <section id="single-panel" class="panel" aria-labelledby="single-title">
+    <section id="single-panel" class="panel" role="tabpanel" aria-labelledby="single-mode">
       <h2 id="single-title">Check one label</h2>
       <form id="single-form" novalidate>
         <div class="form-grid">
           <div class="field full">
             <label for="image">Choose Label Photo</label>
-            <input id="image" name="image" type="file" accept="image/jpeg,image/png,.jpg,.jpeg,.png" />
+            <input id="image" name="image" type="file" accept="image/jpeg,image/png,.jpg,.jpeg,.png" required aria-describedby="chosen-file" />
             <div id="chosen-file" class="chosen-file" aria-live="polite">No photo chosen yet.</div>
           </div>
 
           <div class="field">
             <label for="brand">Brand</label>
-            <input id="brand" name="brand" type="text" autocomplete="off" />
+            <input id="brand" name="brand" type="text" autocomplete="off" required />
           </div>
 
           <div class="field">
             <label for="product-class">Class or Type</label>
-            <input id="product-class" name="product_class" type="text" autocomplete="off" />
+            <input id="product-class" name="product_class" type="text" autocomplete="off" required />
           </div>
 
           <div class="field">
             <label for="producer">Producer</label>
-            <input id="producer" name="producer" type="text" autocomplete="off" />
+            <input id="producer" name="producer" type="text" autocomplete="off" required />
           </div>
 
           <div class="field">
             <label for="country">Country</label>
-            <input id="country" name="country" type="text" autocomplete="off" />
+            <input id="country" name="country" type="text" autocomplete="off" required />
           </div>
 
           <div class="field">
             <label for="abv">Alcohol %</label>
-            <input id="abv" name="abv" type="text" autocomplete="off" />
+            <input id="abv" name="abv" type="text" autocomplete="off" required />
           </div>
 
           <div class="field">
             <label for="net-contents">Bottle Size</label>
-            <input id="net-contents" name="net_contents" type="text" autocomplete="off" />
+            <input id="net-contents" name="net_contents" type="text" autocomplete="off" required />
           </div>
 
           <div class="field full">
             <label for="government-warning">Government Warning</label>
-            <textarea id="government-warning" name="government_warning"></textarea>
+            <textarea id="government-warning" name="government_warning" required></textarea>
           </div>
         </div>
 
@@ -525,7 +535,7 @@
       </form>
     </section>
 
-    <section id="batch-panel" class="panel hidden" aria-labelledby="batch-title">
+    <section id="batch-panel" class="panel hidden" role="tabpanel" aria-labelledby="batch-mode" hidden>
       <h2 id="batch-title">Batch Label Check</h2>
       <form id="batch-form" novalidate>
         <div id="batch-list" class="batch-list"></div>
@@ -536,10 +546,10 @@
       </form>
     </section>
 
-    <div id="error-message" class="message" role="alert"></div>
+    <div id="error-message" class="message" role="alert" tabindex="-1"></div>
     <div id="loading-message" class="loading" role="status" aria-live="polite">Checking labels now.</div>
 
-    <section id="results" class="panel results" aria-live="polite" aria-labelledby="results-title">
+    <section id="results" class="panel results" aria-live="polite" aria-labelledby="results-title" tabindex="-1">
       <h2 id="results-title" class="sr-only">Results</h2>
       <div id="verdict"></div>
       <div id="summary"></div>
@@ -625,11 +635,26 @@
     function clearError() {
       errorMessage.textContent = '';
       errorMessage.classList.remove('show');
+      document.querySelectorAll('[aria-invalid="true"]').forEach((control) => {
+        control.removeAttribute('aria-invalid');
+      });
     }
 
-    function showError(message) {
+    function focusAfterPaint(element) {
+      window.requestAnimationFrame(() => {
+        element.focus({ preventScroll: false });
+      });
+    }
+
+    function showError(message, invalidControls = []) {
       errorMessage.textContent = message;
       errorMessage.classList.add('show');
+      invalidControls.forEach((control) => {
+        if (control) {
+          control.setAttribute('aria-invalid', 'true');
+        }
+      });
+      focusAfterPaint(errorMessage);
     }
 
     function clearResults() {
@@ -645,8 +670,14 @@
       const isBatch = mode === 'batch';
       batchPanel.classList.toggle('hidden', !isBatch);
       singlePanel.classList.toggle('hidden', isBatch);
+      batchPanel.hidden = !isBatch;
+      singlePanel.hidden = isBatch;
       batchMode.classList.toggle('active', isBatch);
       singleMode.classList.toggle('active', !isBatch);
+      batchMode.setAttribute('aria-selected', String(isBatch));
+      singleMode.setAttribute('aria-selected', String(!isBatch));
+      batchMode.tabIndex = isBatch ? 0 : -1;
+      singleMode.tabIndex = isBatch ? -1 : 0;
       clearError();
       clearResults();
     }
@@ -735,6 +766,19 @@
       return singleFields.every((field) => field.element.value.trim().length > 0);
     }
 
+    function missingSingleControls() {
+      const missing = [];
+      if (!imageInput.files || !imageInput.files[0]) {
+        missing.push(imageInput);
+      }
+      singleFields.forEach((field) => {
+        if (!field.element.value.trim()) {
+          missing.push(field.element);
+        }
+      });
+      return missing;
+    }
+
     function renderFieldResults(fieldResults) {
       const byName = new Map((fieldResults || []).map((result) => [result.field_name, result]));
       return orderedFieldNames.map((fieldName) => {
@@ -799,6 +843,7 @@
         : '';
       results.classList.add('show');
       results.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      focusAfterPaint(results);
     }
 
     function updateBatchButtons() {
@@ -808,6 +853,7 @@
         card.querySelector('.batch-title').textContent = `Label ${index + 1}`;
         const removeButton = card.querySelector('.remove-label');
         removeButton.disabled = cards.length === 1;
+        removeButton.setAttribute('aria-label', `Remove label ${index + 1}`);
       });
     }
 
@@ -821,8 +867,8 @@
         const id = `${prefix}-${key}`;
         const fieldClass = key === 'government_warning' ? 'field full' : 'field';
         const control = type === 'textarea'
-          ? `<textarea id="${id}" data-batch-field="${key}"></textarea>`
-          : `<input id="${id}" data-batch-field="${key}" type="text" autocomplete="off" />`;
+          ? `<textarea id="${id}" data-batch-field="${key}" required></textarea>`
+          : `<input id="${id}" data-batch-field="${key}" type="text" autocomplete="off" required />`;
         return `
           <div class="${fieldClass}">
             <label for="${id}">${label}</label>
@@ -839,8 +885,8 @@
         <div class="form-grid">
           <div class="field full">
             <label for="${prefix}-image">Choose Label Photo</label>
-            <input id="${prefix}-image" data-batch-image type="file" accept="image/jpeg,image/png,.jpg,.jpeg,.png" />
-            <div class="chosen-file" aria-live="polite">No photo chosen yet.</div>
+            <input id="${prefix}-image" data-batch-image type="file" accept="image/jpeg,image/png,.jpg,.jpeg,.png" required aria-describedby="${prefix}-chosen-file" />
+            <div id="${prefix}-chosen-file" class="chosen-file" aria-live="polite">No photo chosen yet.</div>
           </div>
           ${fieldsHtml}
         </div>
@@ -883,6 +929,22 @@
 
     function batchItemIsComplete(item) {
       return item.file && batchFieldConfig.every(([key]) => item.values[key]);
+    }
+
+    function missingBatchControls(items) {
+      const missing = [];
+      items.forEach((item) => {
+        const image = item.card.querySelector('[data-batch-image]');
+        if (!item.file) {
+          missing.push(image);
+        }
+        item.card.querySelectorAll('[data-batch-field]').forEach((control) => {
+          if (!control.value.trim()) {
+            missing.push(control);
+          }
+        });
+      });
+      return missing;
     }
 
     function renderBatchResults(data) {
@@ -939,6 +1001,7 @@
         : '';
       results.classList.add('show');
       results.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      focusAfterPaint(results);
     }
 
     async function submitForm(url, formData, labelCount, render) {
@@ -988,12 +1051,12 @@
       clearResults();
 
       if (!imageInput.files || !imageInput.files[0]) {
-        showError('Please choose a label photo.');
+        showError('Please choose a label photo.', [imageInput]);
         return;
       }
 
       if (!singleHasAllFields()) {
-        showError('Please fill in all seven boxes.');
+        showError('Please fill in all seven boxes.', missingSingleControls());
         return;
       }
 
@@ -1023,7 +1086,7 @@
       }
 
       if (!items.every(batchItemIsComplete)) {
-        showError('Each label needs one photo and all seven boxes filled in.');
+        showError('Each label needs one photo and all seven boxes filled in.', missingBatchControls(items));
         return;
       }
 

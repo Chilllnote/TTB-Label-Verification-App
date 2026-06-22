@@ -2,7 +2,7 @@
 
 from typing import Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class ApplicationData(BaseModel):
@@ -17,6 +17,30 @@ class ApplicationData(BaseModel):
     abv: str
     net_contents: str
     government_warning: str
+
+    @field_validator(
+        "brand",
+        "product_class",
+        "producer",
+        "country",
+        "abv",
+        "net_contents",
+        "government_warning",
+        mode="before",
+    )
+    @classmethod
+    def require_non_blank_string(cls, value):
+        if value is None:
+            raise ValueError("Field is required")
+
+        if not isinstance(value, str):
+            value = str(value)
+
+        value = value.strip()
+        if not value:
+            raise ValueError("Field cannot be blank")
+
+        return value
 
 
 class ExtractedLabel(BaseModel):
@@ -48,6 +72,27 @@ class FieldResult(BaseModel):
     message: str
 
 
+class LatencyMetrics(BaseModel):
+    """Internal timing and sizing measurements for one label verification."""
+
+    upload_read_ms: float = 0.0
+    image_validate_ms: float = 0.0
+    preprocess_ms: float = 0.0
+    vision_ms: float = 0.0
+    compare_ms: float = 0.0
+    total_latency_ms: float = 0.0
+    original_bytes: int = 0
+    preprocessed_bytes: int = 0
+    image_width: Optional[int] = None
+    image_height: Optional[int] = None
+    image_format: Optional[str] = None
+    preprocessed_width: Optional[int] = None
+    preprocessed_height: Optional[int] = None
+    preprocessed_format: Optional[str] = None
+    vision_service: str
+    vision_model: Optional[str] = None
+
+
 class VerificationResult(BaseModel):
     """Overall verification result."""
 
@@ -56,6 +101,7 @@ class VerificationResult(BaseModel):
     summary: str
     failed_fields: Optional[list[str]] = None
     latency_ms: float
+    metrics: Optional[LatencyMetrics] = None
 
 
 class BatchSummary(BaseModel):
