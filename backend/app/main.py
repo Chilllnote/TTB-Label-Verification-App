@@ -7,10 +7,14 @@ import os
 import time
 from pathlib import Path
 
+from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
+
+# Load environment variables from a .env file at the project root if present.
+load_dotenv(dotenv_path=Path(__file__).resolve().parents[2] / ".env")
 
 from app.comparison import verify_label
 from app.models import (
