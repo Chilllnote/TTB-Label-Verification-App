@@ -38,7 +38,7 @@
     }
 
     main {
-      width: min(100%, 980px);
+      width: min(100%, 1040px);
       margin: 0 auto;
       padding: 28px 18px 48px;
     }
@@ -50,10 +50,18 @@
       letter-spacing: 0;
     }
 
-    h2 {
+    h2,
+    h3 {
       margin: 0;
-      font-size: 1.55rem;
       letter-spacing: 0;
+    }
+
+    h2 {
+      font-size: 1.55rem;
+    }
+
+    h3 {
+      font-size: 1.25rem;
     }
 
     p {
@@ -61,9 +69,35 @@
     }
 
     .intro {
-      margin-bottom: 26px;
+      margin-bottom: 22px;
       color: var(--muted);
       font-size: 1.2rem;
+    }
+
+    .mode-switch {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+
+    .mode-button,
+    .secondary-action {
+      min-height: 52px;
+      border: 2px solid var(--button);
+      border-radius: 6px;
+      background: #fff;
+      color: var(--button);
+      cursor: pointer;
+      font: inherit;
+      font-weight: 800;
+      padding: 10px 14px;
+    }
+
+    .mode-button.active,
+    .secondary-action.strong {
+      background: var(--button);
+      color: #fff;
     }
 
     .panel {
@@ -118,7 +152,7 @@
     }
 
     textarea {
-      min-height: 130px;
+      min-height: 126px;
       resize: vertical;
     }
 
@@ -148,12 +182,17 @@
       font-weight: 800;
     }
 
-    .primary-action:hover:not(:disabled) {
-      background: var(--button-hover);
+    .primary-action:hover:not(:disabled),
+    .mode-button:hover,
+    .secondary-action:hover:not(:disabled) {
+      filter: brightness(0.95);
     }
 
-    .primary-action:disabled {
+    .primary-action:disabled,
+    .secondary-action:disabled {
       background: var(--button-disabled);
+      border-color: var(--button-disabled);
+      color: #fff;
       cursor: not-allowed;
     }
 
@@ -168,7 +207,9 @@
       font-weight: 800;
     }
 
-    .message.show {
+    .message.show,
+    .loading.show,
+    .results.show {
       display: block;
     }
 
@@ -183,16 +224,37 @@
       font-weight: 800;
     }
 
-    .loading.show {
-      display: block;
-    }
-
-    .results {
+    .results,
+    .hidden {
       display: none;
     }
 
-    .results.show {
-      display: block;
+    .batch-list {
+      display: grid;
+      gap: 18px;
+      margin-top: 18px;
+    }
+
+    .batch-card {
+      border: 2px solid var(--line);
+      border-radius: 8px;
+      padding: 18px;
+      background: #fff;
+    }
+
+    .batch-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .batch-actions {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 18px;
     }
 
     .verdict {
@@ -207,7 +269,8 @@
       background: var(--approved-bg);
     }
 
-    .verdict.review {
+    .verdict.review,
+    .verdict.error {
       color: var(--review);
       background: var(--review-bg);
     }
@@ -227,6 +290,35 @@
       font-weight: 700;
     }
 
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+
+    .summary-box {
+      border: 2px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 14px;
+      text-align: center;
+    }
+
+    .summary-number {
+      display: block;
+      font-size: 2.35rem;
+      line-height: 1;
+      font-weight: 900;
+    }
+
+    .summary-label {
+      display: block;
+      margin-top: 6px;
+      color: var(--muted);
+      font-weight: 800;
+    }
+
     .result-list {
       display: grid;
       gap: 12px;
@@ -244,10 +336,16 @@
       border-left-color: var(--approved);
     }
 
-    .result-row.fail {
+    .result-row.fail,
+    .result-row.error {
       border-color: var(--fail-line);
       border-left-color: var(--fail-line);
       background: var(--fail-bg);
+    }
+
+    .result-row.review {
+      border-left-color: var(--review);
+      background: var(--review-bg);
     }
 
     .result-head {
@@ -261,6 +359,7 @@
     .result-name {
       font-size: 1.25rem;
       font-weight: 900;
+      overflow-wrap: anywhere;
     }
 
     .badge {
@@ -276,8 +375,13 @@
       background: var(--approved);
     }
 
-    .badge.fail {
+    .badge.fail,
+    .badge.error {
       background: var(--fail-line);
+    }
+
+    .badge.review {
+      background: var(--review);
     }
 
     .value-line {
@@ -298,6 +402,15 @@
       margin-top: 8px;
       color: var(--muted);
       font-size: 1rem;
+    }
+
+    .item-details {
+      display: none;
+      margin-top: 14px;
+    }
+
+    .item-details.open {
+      display: block;
     }
 
     .time {
@@ -328,15 +441,20 @@
         padding: 18px 12px 36px;
       }
 
-      .panel {
+      .panel,
+      .batch-card {
         padding: 16px;
       }
 
-      .form-grid {
+      .form-grid,
+      .mode-switch,
+      .batch-actions,
+      .summary-grid {
         grid-template-columns: 1fr;
       }
 
-      .result-head {
+      .result-head,
+      .batch-head {
         align-items: flex-start;
         flex-direction: column;
       }
@@ -350,11 +468,16 @@
 <body>
   <main>
     <h1>Label Check</h1>
-    <p class="intro">Choose a label photo, fill in the boxes, and check the result.</p>
+    <p class="intro">Choose label photos, fill in the boxes, and check the result.</p>
 
-    <section class="panel" aria-labelledby="form-title">
-      <h2 id="form-title">Check one label</h2>
-      <form id="label-form" novalidate>
+    <div class="mode-switch" role="tablist" aria-label="Choose label check type">
+      <button id="single-mode" class="mode-button active" type="button">One Label</button>
+      <button id="batch-mode" class="mode-button" type="button">Batch</button>
+    </div>
+
+    <section id="single-panel" class="panel" aria-labelledby="single-title">
+      <h2 id="single-title">Check one label</h2>
+      <form id="single-form" novalidate>
         <div class="form-grid">
           <div class="field full">
             <label for="image">Choose Label Photo</label>
@@ -398,40 +521,66 @@
           </div>
         </div>
 
-        <button id="submit-button" class="primary-action" type="submit">Check Label</button>
-        <div id="error-message" class="message" role="alert"></div>
-        <div id="loading-message" class="loading" role="status" aria-live="polite">Checking the label now.</div>
+        <button id="single-submit" class="primary-action" type="submit">Check Label</button>
       </form>
     </section>
 
+    <section id="batch-panel" class="panel hidden" aria-labelledby="batch-title">
+      <h2 id="batch-title">Batch Label Check</h2>
+      <form id="batch-form" novalidate>
+        <div id="batch-list" class="batch-list"></div>
+        <div class="batch-actions">
+          <button id="add-label" class="secondary-action" type="button">Add Another Label</button>
+          <button id="batch-submit" class="primary-action" type="submit">Check All Labels</button>
+        </div>
+      </form>
+    </section>
+
+    <div id="error-message" class="message" role="alert"></div>
+    <div id="loading-message" class="loading" role="status" aria-live="polite">Checking labels now.</div>
+
     <section id="results" class="panel results" aria-live="polite" aria-labelledby="results-title">
       <h2 id="results-title" class="sr-only">Results</h2>
-      <div id="verdict" class="verdict"></div>
+      <div id="verdict"></div>
+      <div id="summary"></div>
       <div id="result-list" class="result-list"></div>
       <div id="time" class="time"></div>
     </section>
   </main>
 
   <script>
-    const form = document.getElementById('label-form');
+    const singleMode = document.getElementById('single-mode');
+    const batchMode = document.getElementById('batch-mode');
+    const singlePanel = document.getElementById('single-panel');
+    const batchPanel = document.getElementById('batch-panel');
+    const singleForm = document.getElementById('single-form');
+    const batchForm = document.getElementById('batch-form');
     const imageInput = document.getElementById('image');
     const chosenFile = document.getElementById('chosen-file');
-    const submitButton = document.getElementById('submit-button');
+    const singleSubmit = document.getElementById('single-submit');
+    const batchSubmit = document.getElementById('batch-submit');
+    const addLabelButton = document.getElementById('add-label');
+    const batchList = document.getElementById('batch-list');
     const errorMessage = document.getElementById('error-message');
     const loadingMessage = document.getElementById('loading-message');
     const results = document.getElementById('results');
     const verdict = document.getElementById('verdict');
+    const summary = document.getElementById('summary');
     const resultList = document.getElementById('result-list');
     const time = document.getElementById('time');
 
-    const fields = [
-      { key: 'brand', label: 'Brand', element: document.getElementById('brand') },
-      { key: 'class', label: 'Class or Type', element: document.getElementById('product-class') },
-      { key: 'producer', label: 'Producer', element: document.getElementById('producer') },
-      { key: 'country', label: 'Country', element: document.getElementById('country') },
-      { key: 'abv', label: 'Alcohol %', element: document.getElementById('abv') },
-      { key: 'net_contents', label: 'Bottle Size', element: document.getElementById('net-contents') },
-      { key: 'government_warning', label: 'Government Warning', element: document.getElementById('government-warning') },
+    const maxBatchLabels = 5;
+    let batchId = 0;
+    let progressTimer = null;
+
+    const singleFields = [
+      { key: 'brand', element: document.getElementById('brand') },
+      { key: 'class', element: document.getElementById('product-class') },
+      { key: 'producer', element: document.getElementById('producer') },
+      { key: 'country', element: document.getElementById('country') },
+      { key: 'abv', element: document.getElementById('abv') },
+      { key: 'net_contents', element: document.getElementById('net-contents') },
+      { key: 'government_warning', element: document.getElementById('government-warning') },
     ];
 
     const fieldLabels = {
@@ -454,6 +603,16 @@
       'government_warning',
     ];
 
+    const batchFieldConfig = [
+      ['brand', 'Brand', 'input'],
+      ['class', 'Class or Type', 'input'],
+      ['producer', 'Producer', 'input'],
+      ['country', 'Country', 'input'],
+      ['abv', 'Alcohol %', 'input'],
+      ['net_contents', 'Bottle Size', 'input'],
+      ['government_warning', 'Government Warning', 'textarea'],
+    ];
+
     function escapeHtml(value) {
       return String(value ?? '')
         .replaceAll('&', '&amp;')
@@ -463,26 +622,9 @@
         .replaceAll("'", '&#039;');
     }
 
-    function hasImage() {
-      return imageInput.files && imageInput.files.length > 0;
-    }
-
-    function hasAllFields() {
-      return fields.every((field) => field.element.value.trim().length > 0);
-    }
-
-    function setBusy(isBusy) {
-      imageInput.disabled = isBusy;
-      fields.forEach((field) => {
-        field.element.disabled = isBusy;
-      });
-      submitButton.disabled = isBusy;
-      submitButton.textContent = isBusy ? 'Checking...' : 'Check Label';
-      loadingMessage.classList.toggle('show', isBusy);
-    }
-
-    function updateReadyState() {
-      submitButton.disabled = false;
+    function clearError() {
+      errorMessage.textContent = '';
+      errorMessage.classList.remove('show');
     }
 
     function showError(message) {
@@ -490,17 +632,52 @@
       errorMessage.classList.add('show');
     }
 
-    function clearError() {
-      errorMessage.textContent = '';
-      errorMessage.classList.remove('show');
-    }
-
     function clearResults() {
       results.classList.remove('show');
-      verdict.className = 'verdict';
+      verdict.className = '';
       verdict.innerHTML = '';
+      summary.innerHTML = '';
       resultList.innerHTML = '';
       time.textContent = '';
+    }
+
+    function setMode(mode) {
+      const isBatch = mode === 'batch';
+      batchPanel.classList.toggle('hidden', !isBatch);
+      singlePanel.classList.toggle('hidden', isBatch);
+      batchMode.classList.toggle('active', isBatch);
+      singleMode.classList.toggle('active', !isBatch);
+      clearError();
+      clearResults();
+    }
+
+    function setBusy(isBusy, labelCount = 1) {
+      const controls = document.querySelectorAll('input, textarea, button');
+      controls.forEach((control) => {
+        control.disabled = isBusy;
+      });
+
+      if (!isBusy) {
+        updateBatchButtons();
+      }
+
+      singleSubmit.textContent = isBusy ? 'Checking...' : 'Check Label';
+      batchSubmit.textContent = isBusy ? 'Checking...' : 'Check All Labels';
+      loadingMessage.textContent = 'Checking labels now.';
+      loadingMessage.classList.toggle('show', isBusy);
+
+      if (progressTimer) {
+        clearTimeout(progressTimer);
+        progressTimer = null;
+      }
+
+      if (isBusy) {
+        progressTimer = setTimeout(() => {
+          loadingMessage.textContent = labelCount === 1
+            ? 'Still checking the label...'
+            : `Checking ${labelCount} labels...`;
+        }, 800);
+      }
     }
 
     function readProblem(responseBody, statusCode) {
@@ -511,16 +688,18 @@
         return 'Please choose a JPG or PNG image.';
       }
 
-      if (lowerDetail.includes('too large')) {
-        return 'Please choose an image under 5 MB.';
+      if (lowerDetail.includes('too large') || lowerDetail.includes('maximum allowed size is 5')) {
+        return lowerDetail.includes('batch')
+          ? 'Please check 5 labels or fewer at one time.'
+          : 'Please choose an image under 5 MB.';
       }
 
-      if (lowerDetail.includes('empty')) {
-        return 'The photo is empty. Please choose another label photo.';
+      if (lowerDetail.includes('each label needs')) {
+        return 'Each label needs one photo and one set of boxes.';
       }
 
       if (lowerDetail.includes('application_data') || lowerDetail.includes('missing required fields')) {
-        return 'Please fill in all seven boxes.';
+        return 'Please fill in all seven boxes for each label.';
       }
 
       if (statusCode >= 500) {
@@ -544,29 +723,21 @@
       return 'The value found on the label does not match the expected value.';
     }
 
-    function buildPayload() {
+    function buildSinglePayload() {
       const data = {};
-      fields.forEach((field) => {
+      singleFields.forEach((field) => {
         data[field.key] = field.element.value.trim();
       });
       return data;
     }
 
-    function renderResults(data) {
-      const isApproved = data.overall_status === 'PASS';
-      const title = isApproved ? 'APPROVED' : 'NEEDS REVIEW';
-      const copy = isApproved
-        ? 'All fields matched.'
-        : 'One or more fields need a closer look.';
+    function singleHasAllFields() {
+      return singleFields.every((field) => field.element.value.trim().length > 0);
+    }
 
-      verdict.className = `verdict ${isApproved ? 'approved' : 'review'}`;
-      verdict.innerHTML = `
-        <span class="verdict-title">${title}</span>
-        <p class="verdict-copy">${copy}</p>
-      `;
-
-      const byName = new Map((data.field_results || []).map((result) => [result.field_name, result]));
-      resultList.innerHTML = orderedFieldNames.map((fieldName) => {
+    function renderFieldResults(fieldResults) {
+      const byName = new Map((fieldResults || []).map((result) => [result.field_name, result]));
+      return orderedFieldNames.map((fieldName) => {
         const result = byName.get(fieldName);
         const label = fieldLabels[fieldName] || fieldName;
 
@@ -612,57 +783,168 @@
           </article>
         `;
       }).join('');
+    }
 
-      if (typeof data.latency_ms === 'number') {
-        time.textContent = `Checked in ${(data.latency_ms / 1000).toFixed(1)} seconds.`;
-      } else {
-        time.textContent = '';
-      }
-
+    function renderSingleResults(data) {
+      const isApproved = data.overall_status === 'PASS';
+      verdict.className = `verdict ${isApproved ? 'approved' : 'review'}`;
+      verdict.innerHTML = `
+        <span class="verdict-title">${isApproved ? 'APPROVED' : 'NEEDS REVIEW'}</span>
+        <p class="verdict-copy">${isApproved ? 'All fields matched.' : 'One or more fields need a closer look.'}</p>
+      `;
+      summary.innerHTML = '';
+      resultList.innerHTML = renderFieldResults(data.field_results);
+      time.textContent = typeof data.latency_ms === 'number'
+        ? `Checked in ${(data.latency_ms / 1000).toFixed(1)} seconds.`
+        : '';
       results.classList.add('show');
       results.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
-    imageInput.addEventListener('change', () => {
-      const file = imageInput.files && imageInput.files[0];
-      chosenFile.textContent = file ? `Chosen photo: ${file.name}` : 'No photo chosen yet.';
-      clearError();
-      updateReadyState();
-    });
-
-    fields.forEach((field) => {
-      field.element.addEventListener('input', () => {
-        clearError();
-        updateReadyState();
+    function updateBatchButtons() {
+      const cards = batchList.querySelectorAll('.batch-card');
+      addLabelButton.disabled = cards.length >= maxBatchLabels;
+      cards.forEach((card, index) => {
+        card.querySelector('.batch-title').textContent = `Label ${index + 1}`;
+        const removeButton = card.querySelector('.remove-label');
+        removeButton.disabled = cards.length === 1;
       });
-    });
+    }
 
-    form.addEventListener('submit', async (event) => {
-      event.preventDefault();
-      clearError();
-      clearResults();
+    function createBatchCard() {
+      batchId += 1;
+      const card = document.createElement('article');
+      card.className = 'batch-card';
+      card.dataset.batchId = String(batchId);
+      const prefix = `batch-${batchId}`;
+      const fieldsHtml = batchFieldConfig.map(([key, label, type]) => {
+        const id = `${prefix}-${key}`;
+        const fieldClass = key === 'government_warning' ? 'field full' : 'field';
+        const control = type === 'textarea'
+          ? `<textarea id="${id}" data-batch-field="${key}"></textarea>`
+          : `<input id="${id}" data-batch-field="${key}" type="text" autocomplete="off" />`;
+        return `
+          <div class="${fieldClass}">
+            <label for="${id}">${label}</label>
+            ${control}
+          </div>
+        `;
+      }).join('');
 
-      if (!hasImage()) {
-        showError('Please choose a label photo.');
-        updateReadyState();
-        return;
-      }
+      card.innerHTML = `
+        <div class="batch-head">
+          <h3 class="batch-title">Label</h3>
+          <button class="secondary-action remove-label" type="button">Remove</button>
+        </div>
+        <div class="form-grid">
+          <div class="field full">
+            <label for="${prefix}-image">Choose Label Photo</label>
+            <input id="${prefix}-image" data-batch-image type="file" accept="image/jpeg,image/png,.jpg,.jpeg,.png" />
+            <div class="chosen-file" aria-live="polite">No photo chosen yet.</div>
+          </div>
+          ${fieldsHtml}
+        </div>
+      `;
 
-      if (!hasAllFields()) {
-        showError('Please fill in all seven boxes.');
-        updateReadyState();
-        return;
-      }
+      const fileInput = card.querySelector('[data-batch-image]');
+      const fileLabel = card.querySelector('.chosen-file');
+      fileInput.addEventListener('change', () => {
+        const file = fileInput.files && fileInput.files[0];
+        fileLabel.textContent = file ? `Chosen photo: ${file.name}` : 'No photo chosen yet.';
+        clearError();
+      });
+      card.querySelector('.remove-label').addEventListener('click', () => {
+        card.remove();
+        updateBatchButtons();
+        clearError();
+      });
+      card.querySelectorAll('input[type="text"], textarea').forEach((control) => {
+        control.addEventListener('input', clearError);
+      });
 
-      const file = imageInput.files[0];
-      const formData = new FormData();
-      formData.append('image', file);
-      formData.append('application_data', JSON.stringify(buildPayload()));
+      batchList.appendChild(card);
+      updateBatchButtons();
+    }
 
-      setBusy(true);
+    function getBatchItems() {
+      return Array.from(batchList.querySelectorAll('.batch-card')).map((card) => {
+        const image = card.querySelector('[data-batch-image]');
+        const values = {};
+        card.querySelectorAll('[data-batch-field]').forEach((control) => {
+          values[control.dataset.batchField] = control.value.trim();
+        });
+        return {
+          card,
+          file: image.files && image.files[0],
+          values,
+        };
+      });
+    }
 
+    function batchItemIsComplete(item) {
+      return item.file && batchFieldConfig.every(([key]) => item.values[key]);
+    }
+
+    function renderBatchResults(data) {
+      const counts = data.summary || { total: 0, passed: 0, needs_review: 0, errors: 0 };
+      verdict.className = `verdict ${counts.errors || counts.needs_review ? 'review' : 'approved'}`;
+      verdict.innerHTML = `
+        <span class="verdict-title">${counts.errors || counts.needs_review ? 'NEEDS REVIEW' : 'APPROVED'}</span>
+        <p class="verdict-copy">${counts.total} labels checked.</p>
+      `;
+      summary.innerHTML = `
+        <div class="summary-grid">
+          <div class="summary-box"><span class="summary-number">${counts.total}</span><span class="summary-label">Total</span></div>
+          <div class="summary-box"><span class="summary-number">${counts.passed}</span><span class="summary-label">Approved</span></div>
+          <div class="summary-box"><span class="summary-number">${counts.needs_review}</span><span class="summary-label">Needs Review</span></div>
+          <div class="summary-box"><span class="summary-number">${counts.errors || 0}</span><span class="summary-label">Errors</span></div>
+        </div>
+      `;
+
+      resultList.innerHTML = (data.results || []).map((item) => {
+        const label = item.filename || `Label ${item.index + 1}`;
+        const statusClass = item.status === 'PASS' ? 'pass' : item.status === 'ERROR' ? 'error' : 'review';
+        const statusText = item.status === 'PASS' ? 'APPROVED' : item.status === 'ERROR' ? 'ERROR' : 'NEEDS REVIEW';
+        const failedCount = item.result && Array.isArray(item.result.field_results)
+          ? item.result.field_results.filter((field) => field.status === 'FAIL').length
+          : 0;
+        const detailId = `item-details-${item.index}`;
+        const detailButton = item.result
+          ? `<button class="secondary-action details-toggle" type="button" data-target="${detailId}" aria-expanded="false">View Details</button>`
+          : '';
+        const details = item.result
+          ? `<div id="${detailId}" class="item-details">${renderFieldResults(item.result.field_results)}</div>`
+          : '';
+        const supportingText = item.status === 'ERROR'
+          ? `<p class="reason">${escapeHtml(item.error || 'Something went wrong while checking this label. Please try again.')}</p>`
+          : `<p class="value-line">${failedCount ? `${failedCount} field${failedCount === 1 ? '' : 's'} need a closer look.` : 'All fields matched.'}</p>`;
+
+        return `
+          <article class="result-row ${statusClass}">
+            <div class="result-head">
+              <div>
+                <div class="result-name">${escapeHtml(label)}</div>
+                ${supportingText}
+              </div>
+              <div class="badge ${statusClass}">${statusText}</div>
+            </div>
+            ${detailButton}
+            ${details}
+          </article>
+        `;
+      }).join('');
+
+      time.textContent = typeof data.latency_ms === 'number'
+        ? `Checked in ${(data.latency_ms / 1000).toFixed(1)} seconds.`
+        : '';
+      results.classList.add('show');
+      results.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    async function submitForm(url, formData, labelCount, render) {
+      setBusy(true, labelCount);
       try {
-        const response = await fetch('/verify', {
+        const response = await fetch(url, {
           method: 'POST',
           body: formData,
         });
@@ -679,20 +961,97 @@
           return;
         }
 
-        if (!data || !Array.isArray(data.field_results) || !data.overall_status) {
-          showError('Something went wrong while checking the label. Please try again.');
-          return;
-        }
-
-        renderResults(data);
+        render(data);
       } catch (error) {
         showError('The label checker could not be reached. Please try again.');
       } finally {
         setBusy(false);
       }
+    }
+
+    singleMode.addEventListener('click', () => setMode('single'));
+    batchMode.addEventListener('click', () => setMode('batch'));
+
+    imageInput.addEventListener('change', () => {
+      const file = imageInput.files && imageInput.files[0];
+      chosenFile.textContent = file ? `Chosen photo: ${file.name}` : 'No photo chosen yet.';
+      clearError();
     });
 
-    updateReadyState();
+    singleFields.forEach((field) => {
+      field.element.addEventListener('input', clearError);
+    });
+
+    singleForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      clearError();
+      clearResults();
+
+      if (!imageInput.files || !imageInput.files[0]) {
+        showError('Please choose a label photo.');
+        return;
+      }
+
+      if (!singleHasAllFields()) {
+        showError('Please fill in all seven boxes.');
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('image', imageInput.files[0]);
+      formData.append('application_data', JSON.stringify(buildSinglePayload()));
+      await submitForm('/verify', formData, 1, renderSingleResults);
+    });
+
+    addLabelButton.addEventListener('click', () => {
+      if (batchList.querySelectorAll('.batch-card').length >= maxBatchLabels) {
+        showError('Please check 5 labels or fewer at one time.');
+        return;
+      }
+      createBatchCard();
+    });
+
+    batchForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      clearError();
+      clearResults();
+
+      const items = getBatchItems();
+      if (items.length > maxBatchLabels) {
+        showError('Please check 5 labels or fewer at one time.');
+        return;
+      }
+
+      if (!items.every(batchItemIsComplete)) {
+        showError('Each label needs one photo and all seven boxes filled in.');
+        return;
+      }
+
+      const formData = new FormData();
+      const applicationData = [];
+      items.forEach((item) => {
+        formData.append('images', item.file);
+        applicationData.push(item.values);
+      });
+      formData.append('application_data', JSON.stringify(applicationData));
+      await submitForm('/verify/batch', formData, items.length, renderBatchResults);
+    });
+
+    resultList.addEventListener('click', (event) => {
+      const button = event.target.closest('.details-toggle');
+      if (!button) {
+        return;
+      }
+      const target = document.getElementById(button.dataset.target);
+      if (!target) {
+        return;
+      }
+      const isOpen = target.classList.toggle('open');
+      button.setAttribute('aria-expanded', String(isOpen));
+      button.textContent = isOpen ? 'Hide Details' : 'View Details';
+    });
+
+    createBatchCard();
   </script>
 </body>
 </html>

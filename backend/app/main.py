@@ -1,5 +1,6 @@
 """FastAPI application for TTB Label Verification."""
 
+import asyncio
 import json
 import logging
 import os
@@ -11,12 +12,23 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 
-from app.comparison import verify_label, aggregate_verification
-from app.models import ApplicationData, VerificationResult
+from app.comparison import verify_label
+from app.models import (
+    ApplicationData,
+    BatchItemResult,
+    BatchSummary,
+    BatchVerificationResult,
+    VerificationResult,
+)
 from app.preprocessing import preprocess_image
 from app.vision_service import MockVisionService, OpenAIVisionService, VisionService
 
 logger = logging.getLogger(__name__)
+
+MAX_IMAGE_BYTES = 5 * 1024 * 1024
+MAX_BATCH_SIZE = 5
+DEFAULT_BATCH_CONCURRENCY = 3
+ALLOWED_IMAGE_TYPES = ("image/jpeg", "image/png")
 
 # Initialize FastAPI app
 app = FastAPI(title="TTB Label Verification App")
@@ -81,25 +93,44 @@ def _parse_application_data(raw_json: str) -> ApplicationData:
         )
 
 
-@app.post("/verify", response_model=VerificationResult)
-async def verify_endpoint(
-    image: UploadFile = File(...),
-    application_data: str = Form(...),
-    vision_service: VisionService = Depends(get_vision_service),
+def _parse_batch_application_data(raw_json: str) -> list[ApplicationData]:
+    if not raw_json or not raw_json.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="application_data must be a non-empty JSON array containing one data object per image.",
+        )
+
+    try:
+        raw_items = json.loads(raw_json)
+    except json.JSONDecodeError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid application_data JSON or missing required fields.",
+        )
+
+    if not isinstance(raw_items, list):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="application_data must be a JSON array containing one data object per image.",
+        )
+
+    try:
+        return [ApplicationData.model_validate(item) for item in raw_items]
+    except ValidationError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid application_data JSON or missing required fields.",
+        )
+
+
+async def _verify_uploaded_label(
+    image: UploadFile,
+    application_data_model: ApplicationData,
+    vision_service: VisionService,
 ) -> VerificationResult:
-    """Verify a label image against expected application data.
-
-    Args:
-        image: Label image file (JPEG/PNG, <5MB)
-        application_data: Expected label data as JSON string in multipart form
-        vision_service: Injected VisionService (Mock or OpenAI)
-
-    Returns:
-        VerificationResult with field-by-field comparison, latency, and overall verdict
-    """
     start_time = time.perf_counter()
 
-    if image.content_type not in ("image/jpeg", "image/png"):
+    if image.content_type not in ALLOWED_IMAGE_TYPES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid image format: {image.content_type}. Expected JPEG or PNG.",
@@ -112,13 +143,11 @@ async def verify_endpoint(
             detail="Image upload is empty.",
         )
 
-    if len(image_bytes) > 5 * 1024 * 1024:
+    if len(image_bytes) > MAX_IMAGE_BYTES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Image file too large. Maximum allowed size is 5 MB.",
         )
-
-    application_data_model = _parse_application_data(application_data)
 
     preprocessed_bytes = preprocess_image(image_bytes)
     extracted_label = await vision_service.extract(preprocessed_bytes)
@@ -136,3 +165,136 @@ async def verify_endpoint(
         logger.warning("Verification latency exceeded 5 second budget: %.1fms", latency_ms)
 
     return verification_result
+
+
+def _batch_concurrency_limit() -> int:
+    raw_value = os.getenv("BATCH_CONCURRENCY", str(DEFAULT_BATCH_CONCURRENCY))
+    try:
+        configured = int(raw_value)
+    except ValueError:
+        configured = DEFAULT_BATCH_CONCURRENCY
+    return min(MAX_BATCH_SIZE, max(1, configured))
+
+
+def _plain_item_error(exc: HTTPException) -> str:
+    detail = str(exc.detail)
+    lower_detail = detail.lower()
+    if "invalid image format" in lower_detail:
+        return "Please choose a JPG or PNG image."
+    if "too large" in lower_detail:
+        return "Please choose an image under 5 MB."
+    if "empty" in lower_detail:
+        return "The photo is empty. Please choose another label photo."
+    return detail
+
+
+async def _verify_batch_item(
+    index: int,
+    image: UploadFile,
+    application_data_model: ApplicationData,
+    vision_service: VisionService,
+    semaphore: asyncio.Semaphore,
+) -> BatchItemResult:
+    async with semaphore:
+        filename = image.filename or f"Label {index + 1}"
+        try:
+            result = await _verify_uploaded_label(image, application_data_model, vision_service)
+            return BatchItemResult(
+                index=index,
+                filename=filename,
+                status=result.overall_status,
+                result=result,
+                error=None,
+            )
+        except HTTPException as exc:
+            return BatchItemResult(
+                index=index,
+                filename=filename,
+                status="ERROR",
+                result=None,
+                error=_plain_item_error(exc),
+            )
+        except Exception:
+            logger.exception("Batch item %s failed unexpectedly", index)
+            return BatchItemResult(
+                index=index,
+                filename=filename,
+                status="ERROR",
+                result=None,
+                error="Something went wrong while checking this label. Please try again.",
+            )
+
+
+@app.post("/verify", response_model=VerificationResult)
+async def verify_endpoint(
+    image: UploadFile = File(...),
+    application_data: str = Form(...),
+    vision_service: VisionService = Depends(get_vision_service),
+) -> VerificationResult:
+    """Verify a label image against expected application data."""
+    application_data_model = _parse_application_data(application_data)
+    return await _verify_uploaded_label(image, application_data_model, vision_service)
+
+
+@app.post("/verify/batch", response_model=BatchVerificationResult)
+async def verify_batch_endpoint(
+    images: list[UploadFile] = File(...),
+    application_data: str = Form(...),
+    vision_service: VisionService = Depends(get_vision_service),
+) -> BatchVerificationResult:
+    """Verify multiple label images against expected application data."""
+    start_time = time.perf_counter()
+
+    if not images:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least one label image is required.",
+        )
+
+    if len(images) > MAX_BATCH_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Batch size too large. Maximum allowed size is {MAX_BATCH_SIZE} labels.",
+        )
+
+    application_data_models = _parse_batch_application_data(application_data)
+
+    if len(images) != len(application_data_models):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Each label needs one image and one set of expected values.",
+        )
+
+    semaphore = asyncio.Semaphore(_batch_concurrency_limit())
+    tasks = [
+        _verify_batch_item(index, image, data, vision_service, semaphore)
+        for index, (image, data) in enumerate(zip(images, application_data_models))
+    ]
+    item_results = await asyncio.gather(*tasks)
+
+    passed = sum(1 for item in item_results if item.status == "PASS")
+    needs_review = sum(1 for item in item_results if item.status == "NEEDS_REVIEW")
+    errors = sum(1 for item in item_results if item.status == "ERROR")
+    latency_ms = round((time.perf_counter() - start_time) * 1000, 1)
+
+    logger.info(
+        "Batch verification completed in %.1fms total=%s passed=%s needs_review=%s errors=%s",
+        latency_ms,
+        len(item_results),
+        passed,
+        needs_review,
+        errors,
+    )
+    if latency_ms > 5000:
+        logger.warning("Batch verification latency exceeded 5 second budget: %.1fms", latency_ms)
+
+    return BatchVerificationResult(
+        summary=BatchSummary(
+            total=len(item_results),
+            passed=passed,
+            needs_review=needs_review,
+            errors=errors,
+        ),
+        results=item_results,
+        latency_ms=latency_ms,
+    )
