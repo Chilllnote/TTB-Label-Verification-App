@@ -4,8 +4,8 @@ Proof-of-concept web app for checking alcohol/tobacco label photos against expec
 
 ## Live Demo
 
-- App: `DEPLOYED_URL_PENDING`
-- Health check: `DEPLOYED_URL_PENDING/health`
+- App: `https://web-production-c41d7.up.railway.app`
+- Health check: `https://web-production-c41d7.up.railway.app/health`
 
 The submission deployment is intended to run with `USE_MOCK_VISION=true` so reviewers can test the full UI/API flow without external API quota or billing dependencies.
 
