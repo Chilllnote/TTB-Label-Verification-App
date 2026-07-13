@@ -10,3 +10,5 @@ write NO code. When I say REVIEW, critique that plan against the requirements an
 finalize it. When I say EXECUTE, implement exactly the approved plan with tests, then tell me how
 to verify it. Keep scope to the current phase only. 4. Prefer correctness and clean structure
 over ambition. Confirm you understand these rules.
+
+- At the end of each run, redeploy the container to make sure the changes were also added into the website

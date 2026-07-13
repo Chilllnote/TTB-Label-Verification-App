@@ -149,7 +149,7 @@ class TestVisionServiceIntegration:
         # Run comparison
         result = verify_label(app_data, mock_extraction)
         
-        assert result.overall_status == "PASS"
+        assert result.overall_verdict == "APPROVED"
         assert all(fr.status == "PASS" for fr in result.field_results)
     
     def test_mock_extraction_warning_case_sensitive_fail(self):
@@ -181,10 +181,10 @@ class TestVisionServiceIntegration:
         result = verify_label(app_data, mock_extraction)
         
         # Should have NEEDS_REVIEW due to warning mismatch
-        assert result.overall_status == "NEEDS_REVIEW"
+        assert result.overall_verdict == "NEEDS_REVIEW"
         
         # Find warning field result
-        warning_result = [fr for fr in result.field_results if fr.field_name == "government_warning"][0]
+        warning_result = [fr for fr in result.field_results if fr.field == "government_warning"][0]
         assert warning_result.status == "FAIL"
     
     def test_mock_extraction_partial_null_fields(self):
@@ -216,12 +216,12 @@ class TestVisionServiceIntegration:
         result = verify_label(app_data, mock_extraction)
         
         # Should have NEEDS_REVIEW due to missing class
-        assert result.overall_status == "NEEDS_REVIEW"
+        assert result.overall_verdict == "NEEDS_REVIEW"
         
         # Class field should FAIL
-        class_result = [fr for fr in result.field_results if fr.field_name == "product_class"][0]
+        class_result = [fr for fr in result.field_results if fr.field == "product_class"][0]
         assert class_result.status == "FAIL"
-        assert class_result.extracted == ""  # Null becomes empty string in comparison
+        assert class_result.found == ""  # Null becomes empty string in comparison
 
 
 if __name__ == "__main__":

@@ -27,15 +27,40 @@ from app.models import (
     VerificationResult,
 )
 from app.preprocessing import inspect_image, preprocess_image
-from app.vision_service import MockVisionService, OpenAIVisionService, VisionService
+from app.vision_service import (
+    MockVisionService,
+    OpenAIVisionService,
+    UnavailableVisionService,
+    VisionExtractionError,
+    VisionService,
+)
 
 logger = logging.getLogger(__name__)
 
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
 MAX_BATCH_SIZE = 5
 DEFAULT_BATCH_CONCURRENCY = 3
-ALLOWED_IMAGE_TYPES = ("image/jpeg", "image/png")
+SUPPORTED_IMAGE_TYPES = {
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/gif",
+    "image/bmp",
+    "image/tiff",
+    "image/heic",
+    "image/heif",
+}
 SINGLE_LABEL_BUDGET_MS = 5000.0
+APPLICATION_FIELD_LABELS = {
+    "brand": "Brand",
+    "class": "Class or Type",
+    "product_class": "Class or Type",
+    "producer": "Producer",
+    "country": "Country",
+    "abv": "Alcohol %",
+    "net_contents": "Bottle Size",
+    "government_warning": "Government Warning",
+}
 
 # Initialize FastAPI app
 app = FastAPI(title="TTB Label Verification App")
@@ -59,7 +84,9 @@ async def request_validation_exception_handler(request, exc):
     """Return plain user-safe messages for missing multipart/form fields."""
     return JSONResponse(
         status_code=status.HTTP_400_BAD_REQUEST,
-        content={"detail": "Please choose a label photo and fill in all required fields."},
+        content={
+            "detail": "Please choose a label photo and fill in all required fields."
+        },
     )
 
 
@@ -67,7 +94,7 @@ async def request_validation_exception_handler(request, exc):
 async def startup():
     """Initialize VisionService on app startup."""
     global _vision_service
-    
+
     # Use mock if USE_MOCK_VISION env var is set to "true"
     if os.getenv("USE_MOCK_VISION", "").lower() == "true":
         logger.info("Using MockVisionService (no API calls)")
@@ -77,8 +104,8 @@ async def startup():
             logger.info("Using OpenAIVisionService (real API)")
             _vision_service = OpenAIVisionService()
         except ValueError as e:
-            logger.warning(f"OpenAI initialization failed: {e}. Falling back to Mock.")
-            _vision_service = MockVisionService()
+            logger.error("OpenAI initialization failed: %s", e)
+            _vision_service = UnavailableVisionService(str(e))
 
 
 @app.get("/")
@@ -102,7 +129,21 @@ def _parse_application_data(raw_json: str) -> ApplicationData:
 
     try:
         return ApplicationData.model_validate_json(raw_json)
-    except (ValidationError, json.JSONDecodeError, ValueError):
+    except ValidationError as exc:
+        field_errors = _validation_field_errors(exc)
+        detail = (
+            {
+                "message": _validation_error_message(field_errors),
+                "field_errors": field_errors,
+            }
+            if field_errors
+            else "Invalid application_data JSON or missing required fields."
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=detail,
+        )
+    except (json.JSONDecodeError, ValueError):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid application_data JSON or missing required fields.",
@@ -130,13 +171,63 @@ def _parse_batch_application_data(raw_json: str) -> list[ApplicationData]:
             detail="application_data must be a JSON array containing one data object per image.",
         )
 
-    try:
-        return [ApplicationData.model_validate(item) for item in raw_items]
-    except (ValidationError, ValueError):
+    application_data_models = []
+    field_errors = []
+    for index, item in enumerate(raw_items):
+        try:
+            application_data_models.append(ApplicationData.model_validate(item))
+        except ValidationError as exc:
+            field_errors.extend(_validation_field_errors(exc, index=index))
+
+    if field_errors:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid application_data JSON or missing required fields.",
+            detail={
+                "message": _validation_error_message(field_errors),
+                "field_errors": field_errors,
+            },
         )
+
+    return application_data_models
+
+
+def _validation_field_errors(
+    exc: ValidationError, index: int | None = None
+) -> list[dict[str, object]]:
+    field_errors = []
+    for error in exc.errors():
+        loc = [part for part in error.get("loc", ()) if isinstance(part, str)]
+        if not loc:
+            continue
+
+        field = loc[-1]
+        field_label = APPLICATION_FIELD_LABELS.get(
+            field, field.replace("_", " ").title()
+        )
+        field_errors.append(
+            {
+                "field": field,
+                "label": field_label,
+                "message": str(error.get("msg", "Invalid value")),
+                **({"index": index} if index is not None else {}),
+            }
+        )
+    return field_errors
+
+
+def _validation_error_message(field_errors: list[dict[str, object]]) -> str:
+    if not field_errors:
+        return "Please fix the highlighted fields."
+
+    labels = []
+    for error in field_errors:
+        label = str(error.get("label") or error.get("field") or "Field")
+        if error.get("index") is not None:
+            label = f"Label {int(error['index']) + 1} {label}"
+        if label not in labels:
+            labels.append(label)
+
+    return f"Please fix: {', '.join(labels)}."
 
 
 def _env_int(name: str, default: int, minimum: int, maximum: int) -> int:
@@ -167,10 +258,10 @@ async def _verify_uploaded_label(
         vision_model=getattr(vision_service, "model_name", None),
     )
 
-    if image.content_type not in ALLOWED_IMAGE_TYPES:
+    if image.content_type not in SUPPORTED_IMAGE_TYPES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid image format: {image.content_type}. Expected JPEG or PNG.",
+            detail=f"Invalid image format: {image.content_type}. Expected an image upload.",
         )
 
     read_start = time.perf_counter()
@@ -217,10 +308,20 @@ async def _verify_uploaded_label(
         metrics.preprocessed_height = preprocessed_info.height
         metrics.preprocessed_format = preprocessed_info.format
     except ValueError:
-        logger.warning("Preprocessed image could not be inspected; continuing with original validation result")
+        logger.warning(
+            "Preprocessed image could not be inspected; continuing with original validation result"
+        )
 
     vision_start = time.perf_counter()
-    extracted_label = await vision_service.extract(preprocessed_bytes)
+    try:
+        extracted_label = await vision_service.extract(preprocessed_bytes)
+    except VisionExtractionError as exc:
+        metrics.vision_ms = round((time.perf_counter() - vision_start) * 1000, 1)
+        logger.warning("Vision extraction failed: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="We could not read this photo.",
+        ) from exc
     metrics.vision_ms = round((time.perf_counter() - vision_start) * 1000, 1)
 
     compare_start = time.perf_counter()
@@ -235,10 +336,12 @@ async def _verify_uploaded_label(
     logger.info(
         "Verification completed in %.1fms status=%s",
         latency_ms,
-        verification_result.overall_status,
+        verification_result.overall_verdict,
     )
     if latency_ms > SINGLE_LABEL_BUDGET_MS:
-        logger.warning("Verification latency exceeded 5 second budget: %.1fms", latency_ms)
+        logger.warning(
+            "Verification latency exceeded 5 second budget: %.1fms", latency_ms
+        )
 
     return verification_result
 
@@ -256,9 +359,9 @@ def _plain_item_error(exc: HTTPException) -> str:
     detail = str(exc.detail)
     lower_detail = detail.lower()
     if "invalid image format" in lower_detail:
-        return "Please choose a JPG or PNG image."
-    if "could not be read" in lower_detail:
-        return "Please choose a clear JPG or PNG image."
+        return "Please choose an image file."
+    if "could not be read" in lower_detail or "could not read" in lower_detail:
+        return "Please choose a clear image file."
     if "dimensions are too large" in lower_detail:
         return "Please choose a smaller photo."
     if "too large" in lower_detail:
@@ -278,11 +381,13 @@ async def _verify_batch_item(
     async with semaphore:
         filename = image.filename or f"Label {index + 1}"
         try:
-            result = await _verify_uploaded_label(image, application_data_model, vision_service)
+            result = await _verify_uploaded_label(
+                image, application_data_model, vision_service
+            )
             return BatchItemResult(
                 index=index,
                 filename=filename,
-                status=result.overall_status,
+                status=result.overall_verdict,
                 result=result,
                 error=None,
             )
@@ -352,7 +457,7 @@ async def verify_batch_endpoint(
     ]
     item_results = await asyncio.gather(*tasks)
 
-    passed = sum(1 for item in item_results if item.status == "PASS")
+    passed = sum(1 for item in item_results if item.status == "APPROVED")
     needs_review = sum(1 for item in item_results if item.status == "NEEDS_REVIEW")
     errors = sum(1 for item in item_results if item.status == "ERROR")
     latency_ms = round((time.perf_counter() - start_time) * 1000, 1)
@@ -366,7 +471,9 @@ async def verify_batch_endpoint(
         errors,
     )
     if latency_ms > 5000:
-        logger.warning("Batch verification latency exceeded 5 second budget: %.1fms", latency_ms)
+        logger.warning(
+            "Batch verification latency exceeded 5 second budget: %.1fms", latency_ms
+        )
 
     return BatchVerificationResult(
         summary=BatchSummary(

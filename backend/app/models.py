@@ -34,7 +34,7 @@ class ApplicationData(BaseModel):
             raise ValueError("Field is required")
 
         if not isinstance(value, str):
-            value = str(value)
+            raise ValueError("Field must be text")
 
         value = value.strip()
         if not value:
@@ -59,14 +59,16 @@ class ExtractedLabel(BaseModel):
     abv: Optional[str] = None
     net_contents: Optional[str] = None
     government_warning: Optional[str] = None
+    raw_text: Optional[str] = None
+    extraction_confidence: Optional[float] = None
 
 
 class FieldResult(BaseModel):
     """Result of comparing a single field."""
 
-    field_name: str
+    field: str
     expected: str
-    extracted: str
+    found: str
     status: Literal["PASS", "FAIL"]
     score: Optional[float] = None
     message: str
@@ -97,7 +99,7 @@ class VerificationResult(BaseModel):
     """Overall verification result."""
 
     field_results: list[FieldResult]
-    overall_status: Literal["PASS", "NEEDS_REVIEW"]
+    overall_verdict: Literal["APPROVED", "NEEDS_REVIEW"]
     summary: str
     failed_fields: Optional[list[str]] = None
     latency_ms: float
@@ -118,7 +120,7 @@ class BatchItemResult(BaseModel):
 
     index: int
     filename: str
-    status: Literal["PASS", "NEEDS_REVIEW", "ERROR"]
+    status: Literal["APPROVED", "NEEDS_REVIEW", "ERROR"]
     result: Optional[VerificationResult] = None
     error: Optional[str] = None
 

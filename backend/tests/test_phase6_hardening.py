@@ -152,7 +152,7 @@ def test_valid_label_passes_and_records_latency_metrics():
         )
     )
 
-    assert result.overall_status == "PASS"
+    assert result.overall_verdict == "APPROVED"
     assert result.failed_fields is None
     assert result.latency_ms < 5000
     assert result.metrics is not None
@@ -173,7 +173,7 @@ def test_mismatched_fields_need_review():
 
     result = verify_label(ApplicationData.model_validate(matching_data()), extraction)
 
-    assert result.overall_status == "NEEDS_REVIEW"
+    assert result.overall_verdict == "NEEDS_REVIEW"
     assert set(result.failed_fields or []) == {
         "brand",
         "product_class",
@@ -194,8 +194,8 @@ def test_case_only_non_warning_fields_pass_but_warning_case_fails():
 
     result = verify_label(ApplicationData.model_validate(matching_data()), case_only)
 
-    passing = {field.field_name for field in result.field_results if field.status == "PASS"}
-    failing = {field.field_name for field in result.field_results if field.status == "FAIL"}
+    passing = {field.field for field in result.field_results if field.status == "PASS"}
+    failing = {field.field for field in result.field_results if field.status == "FAIL"}
     assert {"brand", "product_class", "producer"}.issubset(passing)
     assert "government_warning" in failing
 
@@ -203,11 +203,11 @@ def test_case_only_non_warning_fields_pass_but_warning_case_fails():
 def test_abv_and_units_normalization_pass_equivalent_forms_and_fail_wrong_numbers():
     equivalent = matching_extraction(abv="40% Alc./Vol.", net_contents="0.75 L")
     equivalent_result = verify_label(ApplicationData.model_validate(matching_data()), equivalent)
-    assert equivalent_result.overall_status == "PASS"
+    assert equivalent_result.overall_verdict == "APPROVED"
 
     wrong = matching_extraction(abv="41% ABV", net_contents="700 ml")
     wrong_result = verify_label(ApplicationData.model_validate(matching_data()), wrong)
-    failing = {field.field_name for field in wrong_result.field_results if field.status == "FAIL"}
+    failing = {field.field for field in wrong_result.field_results if field.status == "FAIL"}
     assert {"abv", "net_contents"}.issubset(failing)
 
 
@@ -224,7 +224,7 @@ def test_warning_exactness_cases(warning, expected_status):
         ApplicationData.model_validate(matching_data()),
         matching_extraction(government_warning=warning),
     )
-    warning_result = next(field for field in result.field_results if field.field_name == "government_warning")
+    warning_result = next(field for field in result.field_results if field.field == "government_warning")
     assert warning_result.status == expected_status
 
 
@@ -239,7 +239,7 @@ def test_imperfect_valid_image_degrades_to_needs_review_without_crashing():
         )
     )
 
-    assert result.overall_status == "NEEDS_REVIEW"
+    assert result.overall_verdict == "NEEDS_REVIEW"
     assert set(result.failed_fields or []) == {
         "brand",
         "product_class",
@@ -325,7 +325,7 @@ def test_batch_summary_counts_pass_review_and_error():
         "needs_review": 1,
         "errors": 1,
     }
-    assert [item.status for item in result.results] == ["PASS", "NEEDS_REVIEW", "ERROR"]
+    assert [item.status for item in result.results] == ["APPROVED", "NEEDS_REVIEW", "ERROR"]
 
 
 def test_single_label_mocked_speed_budget_is_under_five_seconds():
@@ -341,7 +341,7 @@ def test_single_label_mocked_speed_budget_is_under_five_seconds():
     )
     elapsed_ms = (time.perf_counter() - start) * 1000
 
-    assert result.overall_status == "PASS"
+    assert result.overall_verdict == "APPROVED"
     assert result.latency_ms < 5000
     assert elapsed_ms < 5000
 

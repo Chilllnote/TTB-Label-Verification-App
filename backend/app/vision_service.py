@@ -18,6 +18,18 @@ from app.models import ExtractedLabel
 logger = logging.getLogger(__name__)
 
 
+class VisionExtractionError(Exception):
+    """Base exception for vision extraction failures that are not label mismatches."""
+
+
+class VisionServiceUnavailableError(VisionExtractionError):
+    """Raised when the vision provider is unavailable, rate limited, or times out."""
+
+
+class VisionResponseParseError(VisionExtractionError):
+    """Raised when the vision provider returns malformed extraction data."""
+
+
 def _env_float(name: str, default: float, minimum: float, maximum: float) -> float:
     raw_value = os.getenv(name, str(default))
     try:
@@ -39,17 +51,30 @@ class VisionService(ABC):
         
         Returns:
             ExtractedLabel with fields populated or null.
-            Always returns ExtractedLabel; never throws exception.
+
+        Raises:
+            VisionExtractionError: when extraction could not be completed.
         """
         pass
+
+
+class UnavailableVisionService(VisionService):
+    """Vision service used when real-provider configuration is unavailable."""
+
+    def __init__(self, reason: str):
+        self.reason = reason
+
+    async def extract(self, image_bytes: bytes) -> ExtractedLabel:
+        raise VisionServiceUnavailableError(self.reason)
 
 
 class OpenAIVisionService(VisionService):
     """OpenAI vision service with structured JSON output.
     
     Uses response_format with explicit JSON schema for guaranteed structure.
-    Defensive parsing catches malformed responses. Timeouts and API errors
-    return all-null ExtractedLabel.
+    Defensive parsing raises typed exceptions for malformed responses.
+    Timeouts and API errors raise typed exceptions so reviewers do not see
+    infrastructure failures as label mismatches.
     """
     
     def __init__(self):
@@ -61,24 +86,22 @@ class OpenAIVisionService(VisionService):
 
         self.model_name = os.getenv("OPENAI_VISION_MODEL", "gpt-4o-mini").strip() or "gpt-4o-mini"
         self.timeout_seconds = _env_float("OPENAI_TIMEOUT_SECONDS", 3.8, 1.0, 4.5)
-        self.image_detail = os.getenv("OPENAI_IMAGE_DETAIL", "low").strip().lower()
+        self.image_detail = os.getenv("OPENAI_IMAGE_DETAIL", "high").strip().lower()
         if self.image_detail not in {"low", "high", "auto"}:
-            self.image_detail = "low"
+            self.image_detail = "high"
 
         self.client = AsyncOpenAI(
             api_key=api_key,
             timeout=self.timeout_seconds,
-            max_retries=0,
+            max_retries=1,
         )
     
     async def extract(self, image_bytes: bytes) -> ExtractedLabel:
         """Extract label fields from image using GPT-4o.
         
-        Returns all-null ExtractedLabel on:
-        - Non-label image (model returns nulls)
-        - API timeout/error
-        - Malformed JSON response
-        - Invalid image format
+        Returns ExtractedLabel on successful extraction. Non-label images can
+        still return null fields from the model, but provider and parse failures
+        raise typed exceptions.
         """
         try:
             # Encode image to base64 for API
@@ -92,7 +115,10 @@ class OpenAIVisionService(VisionService):
             
             user_prompt = (
                 "Extract: brand, class, producer, country, abv, net_contents, "
-                "government_warning. Copy abv/net_contents as shown. "
+                "government_warning, raw_text, extraction_confidence. "
+                "Copy abv/net_contents as shown. Put all readable label text in "
+                "raw_text. Use extraction_confidence from 0 to 1 for overall "
+                "field extraction confidence. "
                 "For government_warning, copy character-for-character exactly as "
                 "displayed, preserving case, punctuation, spacing, and line breaks. "
                 "Do not normalize or correct the warning. Use null when unclear."
@@ -131,11 +157,18 @@ class OpenAIVisionService(VisionService):
                                 "country": {"type": ["string", "null"]},
                                 "abv": {"type": ["string", "null"]},
                                 "net_contents": {"type": ["string", "null"]},
-                                "government_warning": {"type": ["string", "null"]}
+                                "government_warning": {"type": ["string", "null"]},
+                                "raw_text": {"type": ["string", "null"]},
+                                "extraction_confidence": {
+                                    "type": ["number", "null"],
+                                    "minimum": 0,
+                                    "maximum": 1,
+                                },
                             },
                             "required": [
                                 "brand", "class", "producer", "country",
-                                "abv", "net_contents", "government_warning"
+                                "abv", "net_contents", "government_warning",
+                                "raw_text", "extraction_confidence"
                             ],
                             "additionalProperties": False
                         }
@@ -154,25 +187,21 @@ class OpenAIVisionService(VisionService):
             
         except ValidationError as e:
             logger.error(f"Malformed extraction JSON (Pydantic validation failed): {e}")
-            return ExtractedLabel(brand=None, product_class=None, producer=None,
-                                country=None, abv=None, net_contents=None,
-                                government_warning=None)
+            raise VisionResponseParseError("Vision response did not match the extraction schema") from e
         except json.JSONDecodeError as e:
             logger.error(f"Malformed extraction JSON (invalid JSON): {e}")
-            return ExtractedLabel(brand=None, product_class=None, producer=None,
-                                country=None, abv=None, net_contents=None,
-                                government_warning=None)
+            raise VisionResponseParseError("Vision response was not valid JSON") from e
         except Exception as e:
             error_name = e.__class__.__name__
             if error_name in {"APIConnectionError", "APITimeoutError", "Timeout"}:
                 logger.error(f"Vision API network error ({error_name}): {e}")
+                raise VisionServiceUnavailableError("Vision service could not be reached") from e
             elif error_name == "RateLimitError":
                 logger.error(f"Vision API rate limited: {e}")
+                raise VisionServiceUnavailableError("Vision service is rate limited") from e
             else:
                 logger.error(f"Unexpected vision service error: {e}")
-            return ExtractedLabel(brand=None, product_class=None, producer=None,
-                                country=None, abv=None, net_contents=None,
-                                government_warning=None)
+                raise VisionExtractionError("Vision extraction failed") from e
 
 
 class MockVisionService(VisionService):

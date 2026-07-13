@@ -9,7 +9,7 @@ from PIL import Image
 
 from app.main import verify_batch_endpoint, verify_endpoint
 from app.models import ExtractedLabel
-from app.vision_service import MockVisionService
+from app.vision_service import MockVisionService, VisionServiceUnavailableError
 
 
 class FakeUpload:
@@ -49,11 +49,29 @@ class SlowVisionService:
             self.active -= 1
 
 
-def make_jpeg_bytes(color=(255, 0, 0)) -> bytes:
+class FailingVisionService:
+    async def extract(self, image_bytes: bytes) -> ExtractedLabel:
+        raise VisionServiceUnavailableError("provider timeout")
+
+
+class CapturingVisionService:
+    def __init__(self):
+        self.image_bytes = None
+
+    async def extract(self, image_bytes: bytes) -> ExtractedLabel:
+        self.image_bytes = image_bytes
+        return matching_extraction()
+
+
+def make_image_bytes(format_name="JPEG", color=(255, 0, 0)) -> bytes:
     buffer = io.BytesIO()
     img = Image.new("RGB", (200, 200), color=color)
-    img.save(buffer, format="JPEG")
+    img.save(buffer, format=format_name)
     return buffer.getvalue()
+
+
+def make_jpeg_bytes(color=(255, 0, 0)) -> bytes:
+    return make_image_bytes("JPEG", color)
 
 
 def matching_application_data() -> dict:
@@ -93,7 +111,7 @@ def test_verify_endpoint_passes_with_matching_mocked_extraction():
         )
     )
 
-    assert result.overall_status == "PASS"
+    assert result.overall_verdict == "APPROVED"
     assert result.latency_ms >= 0
     assert len(result.field_results) == 7
     assert result.failed_fields is None
@@ -111,11 +129,11 @@ def test_verify_endpoint_needs_review_for_warning_case_mismatch():
         )
     )
 
-    assert result.overall_status == "NEEDS_REVIEW"
-    warning_result = next(fr for fr in result.field_results if fr.field_name == "government_warning")
+    assert result.overall_verdict == "NEEDS_REVIEW"
+    warning_result = next(fr for fr in result.field_results if fr.field == "government_warning")
     assert warning_result.status == "FAIL"
     assert warning_result.expected == "WARNING: CONTAINS ALCOHOL"
-    assert warning_result.extracted == "Warning: Contains Alcohol"
+    assert warning_result.found == "Warning: Contains Alcohol"
 
 
 def test_verify_endpoint_rejects_invalid_image_type():
@@ -130,6 +148,28 @@ def test_verify_endpoint_rejects_invalid_image_type():
 
     assert exc_info.value.status_code == 400
     assert "Invalid image format" in exc_info.value.detail
+
+
+@pytest.mark.parametrize(
+    ("filename", "content_type", "format_name"),
+    [
+        ("label.webp", "image/webp", "WEBP"),
+        ("label.tiff", "image/tiff", "TIFF"),
+    ],
+)
+def test_verify_endpoint_accepts_supported_non_picker_formats(filename, content_type, format_name):
+    service = CapturingVisionService()
+
+    result = run(
+        verify_endpoint(
+            image=FakeUpload(filename, make_image_bytes(format_name), content_type),
+            application_data=json.dumps(matching_application_data()),
+            vision_service=service,
+        )
+    )
+
+    assert result.overall_verdict == "APPROVED"
+    assert service.image_bytes.startswith(b"\xff\xd8")
 
 
 def test_verify_endpoint_rejects_oversized_image():
@@ -160,6 +200,30 @@ def test_verify_endpoint_rejects_malformed_application_data():
     assert "Invalid application_data" in exc_info.value.detail
 
 
+def test_verify_endpoint_reports_wrong_type_field_errors():
+    bad_data = matching_application_data()
+    bad_data["abv"] = 40
+
+    with pytest.raises(HTTPException) as exc_info:
+        run(
+            verify_endpoint(
+                image=FakeUpload("label.jpg", make_jpeg_bytes()),
+                application_data=json.dumps(bad_data),
+                vision_service=MockVisionService(),
+            )
+        )
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail["message"] == "Please fix: Alcohol %."
+    assert exc_info.value.detail["field_errors"] == [
+        {
+            "field": "abv",
+            "label": "Alcohol %",
+            "message": "Value error, Field must be text",
+        }
+    ]
+
+
 def test_verify_endpoint_handles_partial_extraction_as_needs_review():
     partial_extraction = matching_extraction()
     partial_extraction.product_class = None
@@ -172,10 +236,31 @@ def test_verify_endpoint_handles_partial_extraction_as_needs_review():
         )
     )
 
-    assert result.overall_status == "NEEDS_REVIEW"
-    class_result = next(fr for fr in result.field_results if fr.field_name == "product_class")
+    assert result.overall_verdict == "NEEDS_REVIEW"
+    class_result = next(fr for fr in result.field_results if fr.field == "product_class")
     assert class_result.status == "FAIL"
-    assert class_result.extracted == ""
+    assert class_result.found == ""
+
+
+def test_extracted_label_contract_includes_raw_text_and_confidence():
+    extracted = ExtractedLabel(raw_text="full label OCR", extraction_confidence=0.82)
+    dumped = extracted.model_dump()
+    assert dumped["raw_text"] == "full label OCR"
+    assert dumped["extraction_confidence"] == 0.82
+
+
+def test_verify_endpoint_maps_vision_failure_to_unreadable_photo_error():
+    with pytest.raises(HTTPException) as exc_info:
+        run(
+            verify_endpoint(
+                image=FakeUpload("label.jpg", make_jpeg_bytes()),
+                application_data=json.dumps(matching_application_data()),
+                vision_service=FailingVisionService(),
+            )
+        )
+
+    assert exc_info.value.status_code == 503
+    assert "could not read this photo" in exc_info.value.detail.lower()
 
 
 def test_verify_batch_endpoint_all_pass_summary_and_order():
@@ -205,7 +290,7 @@ def test_verify_batch_endpoint_all_pass_summary_and_order():
         "label-b.jpg",
         "label-c.jpg",
     ]
-    assert all(item.status == "PASS" for item in result.results)
+    assert all(item.status == "APPROVED" for item in result.results)
 
 
 def test_verify_batch_endpoint_counts_needs_review():
@@ -229,9 +314,9 @@ def test_verify_batch_endpoint_counts_needs_review():
         "needs_review": 1,
         "errors": 0,
     }
-    assert result.results[0].status == "PASS"
+    assert result.results[0].status == "APPROVED"
     assert result.results[1].status == "NEEDS_REVIEW"
-    assert result.results[1].result.overall_status == "NEEDS_REVIEW"
+    assert result.results[1].result.overall_verdict == "NEEDS_REVIEW"
 
 
 def test_verify_batch_endpoint_isolates_bad_image_to_item_error():
@@ -252,10 +337,30 @@ def test_verify_batch_endpoint_isolates_bad_image_to_item_error():
         "needs_review": 0,
         "errors": 1,
     }
-    assert result.results[0].status == "PASS"
+    assert result.results[0].status == "APPROVED"
     assert result.results[1].status == "ERROR"
     assert result.results[1].result is None
-    assert "JPG or PNG" in result.results[1].error
+    assert "image file" in result.results[1].error
+
+
+def test_verify_batch_endpoint_isolates_vision_failure_to_item_error():
+    result = run(
+        verify_batch_endpoint(
+            images=[FakeUpload("label-a.jpg", make_jpeg_bytes())],
+            application_data=json.dumps([matching_application_data()]),
+            vision_service=FailingVisionService(),
+        )
+    )
+
+    assert result.summary.model_dump() == {
+        "total": 1,
+        "passed": 0,
+        "needs_review": 0,
+        "errors": 1,
+    }
+    assert result.results[0].status == "ERROR"
+    assert result.results[0].result is None
+    assert "clear image file" in result.results[0].error
 
 
 def test_verify_batch_endpoint_rejects_image_data_count_mismatch():
@@ -306,7 +411,15 @@ def test_verify_batch_endpoint_rejects_missing_required_fields():
         )
 
     assert exc_info.value.status_code == 400
-    assert "Invalid application_data" in exc_info.value.detail
+    assert exc_info.value.detail["message"] == "Please fix: Label 1 Brand."
+    assert exc_info.value.detail["field_errors"] == [
+        {
+            "field": "brand",
+            "label": "Brand",
+            "message": "Field required",
+            "index": 0,
+        }
+    ]
 
 
 def test_verify_batch_endpoint_processes_concurrently_with_bound(monkeypatch):

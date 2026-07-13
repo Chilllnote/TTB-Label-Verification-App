@@ -98,6 +98,12 @@ class TestProducerFuzzyComparison:
         result = compare_producer("Brown Forman", "Diageo")
         assert result.status == "FAIL"
 
+    def test_below_ninety_threshold_fails(self):
+        """Fuzzy fields should use the brief's 90% threshold."""
+        result = compare_producer("Premium Distillery Inc.", "Premium Distillery Incorporated")
+        assert result.status == "FAIL"
+        assert result.score < 90
+
 
 class TestCountrySynonymComparison:
     """Country synonym and normalization tests."""
@@ -130,6 +136,26 @@ class TestCountrySynonymComparison:
     def test_case_variance_after_normalization_pass(self):
         """Case variance should be normalized."""
         result = compare_country("usa", "UNITED STATES")
+        assert result.status == "PASS"
+
+    def test_united_states_of_america_alias_pass(self):
+        """Full United States spelling should collapse to the US canonical value."""
+        result = compare_country("United States of America", "USA")
+        assert result.status == "PASS"
+
+    @pytest.mark.parametrize(
+        ("expected", "found"),
+        [
+            ("French Republic", "France"),
+            ("Italia", "Italy"),
+            ("Kingdom of Spain", "Spain"),
+            ("Deutschland", "Germany"),
+            ("Portuguese Republic", "Portugal"),
+            ("Commonwealth of Australia", "Australia"),
+        ],
+    )
+    def test_extended_country_aliases_pass(self, expected, found):
+        result = compare_country(expected, found)
         assert result.status == "PASS"
 
     def test_different_countries_fail(self):
@@ -168,10 +194,20 @@ class TestABVNumericNormalization:
         assert result.status == "PASS"
         assert result.score is not None
 
-    def test_within_tolerance_pass(self):
-        """45% vs 44.8% within ±0.2% tolerance should pass."""
-        result = compare_abv("45%", "44.8%")
+    def test_bare_proof_converts_to_abv_pass(self):
+        """Bare proof notation should resolve to half as much ABV."""
+        result = compare_abv("45%", "90 Proof")
         assert result.status == "PASS"
+
+    def test_within_tolerance_pass(self):
+        """45% vs 44.9% within ±0.1% tolerance should pass."""
+        result = compare_abv("45%", "44.9%")
+        assert result.status == "PASS"
+
+    def test_old_point_two_tolerance_now_fails(self):
+        """45% vs 44.8% should fail under the required ±0.1% tolerance."""
+        result = compare_abv("45%", "44.8%")
+        assert result.status == "FAIL"
 
     def test_outside_tolerance_fail(self):
         """45% vs 44% outside tolerance should fail."""
@@ -304,8 +340,8 @@ class TestFieldResultBehavior:
         """FieldResult should always contain both expected and extracted."""
         result = compare_brand("Brand1", "Brand2")
         assert result.expected == "Brand1"
-        assert result.extracted == "Brand2"
-        assert result.field_name == "brand"
+        assert result.found == "Brand2"
+        assert result.field == "brand"
 
     def test_misread_warning_returns_extracted_text(self):
         """Misread warning should have extracted text in result."""
@@ -314,8 +350,9 @@ class TestFieldResultBehavior:
         )
         assert result.status == "FAIL"
         assert result.expected == "WARNING: CONTAINS ALCOHOL"
-        assert result.extracted == "CAUTION: ALCOHOL PRESENT"
+        assert result.found == "CAUTION: ALCOHOL PRESENT"
         assert result.message
+        assert "CAUTION: ALCOHOL PRESENT" in result.message
 
     def test_score_populated_for_fuzzy_field(self):
         """Score should be populated for fuzzy fields."""
@@ -344,7 +381,7 @@ class TestAggregationRule:
             compare_country("USA", "United States"),
         ]
         verdict = aggregate_verification(field_results)
-        assert verdict.overall_status == "PASS"
+        assert verdict.overall_verdict == "APPROVED"
         assert verdict.summary
 
     def test_one_fail_results_in_needs_review(self):
@@ -358,7 +395,7 @@ class TestAggregationRule:
             ),  # FAIL
         ]
         verdict = aggregate_verification(field_results)
-        assert verdict.overall_status == "NEEDS_REVIEW"
+        assert verdict.overall_verdict == "NEEDS_REVIEW"
         assert verdict.failed_fields is not None
         assert "government_warning" in verdict.failed_fields
 
@@ -371,7 +408,7 @@ class TestAggregationRule:
             compare_abv("45%", "30%"),  # FAIL
         ]
         verdict = aggregate_verification(field_results)
-        assert verdict.overall_status == "NEEDS_REVIEW"
+        assert verdict.overall_verdict == "NEEDS_REVIEW"
         assert len(verdict.failed_fields) >= 2
 
     def test_parse_error_in_field_results_in_fail(self):

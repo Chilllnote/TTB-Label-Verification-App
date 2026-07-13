@@ -20,9 +20,9 @@ def compare_brand(expected: str, extracted: str) -> FieldResult:
     """
     if not expected or not extracted:
         return FieldResult(
-            field_name="brand",
+            field="brand",
             expected=expected or "",
-            extracted=extracted or "",
+            found=extracted or "",
             status="FAIL",
             score=0.0,
             message="Missing brand name",
@@ -31,22 +31,22 @@ def compare_brand(expected: str, extracted: str) -> FieldResult:
     # Use token_set_ratio for case-insensitive, word-order-tolerant matching
     # Convert to lowercase first for consistent case-insensitive comparison
     score = fuzz.token_set_ratio(expected.lower(), extracted.lower())
-    threshold = 80
+    threshold = 90
 
     if score >= threshold:
         return FieldResult(
-            field_name="brand",
+            field="brand",
             expected=expected,
-            extracted=extracted,
+            found=extracted,
             status="PASS",
             score=float(score),
             message=f"Brand match: fuzzy score {score:.1f}%",
         )
     else:
         return FieldResult(
-            field_name="brand",
+            field="brand",
             expected=expected,
-            extracted=extracted,
+            found=extracted,
             status="FAIL",
             score=float(score),
             message=f"Brand mismatch: fuzzy score {score:.1f}% below threshold {threshold}%",
@@ -65,31 +65,31 @@ def compare_product_class(expected: str, extracted: str) -> FieldResult:
     """
     if not expected or not extracted:
         return FieldResult(
-            field_name="product_class",
+            field="product_class",
             expected=expected or "",
-            extracted=extracted or "",
+            found=extracted or "",
             status="FAIL",
             score=0.0,
             message="Missing product class",
         )
 
     score = fuzz.token_set_ratio(expected.lower(), extracted.lower())
-    threshold = 80
+    threshold = 90
 
     if score >= threshold:
         return FieldResult(
-            field_name="product_class",
+            field="product_class",
             expected=expected,
-            extracted=extracted,
+            found=extracted,
             status="PASS",
             score=float(score),
             message=f"Product class match: fuzzy score {score:.1f}%",
         )
     else:
         return FieldResult(
-            field_name="product_class",
+            field="product_class",
             expected=expected,
-            extracted=extracted,
+            found=extracted,
             status="FAIL",
             score=float(score),
             message=f"Product class mismatch: fuzzy score {score:.1f}% below threshold {threshold}%",
@@ -108,31 +108,31 @@ def compare_producer(expected: str, extracted: str) -> FieldResult:
     """
     if not expected or not extracted:
         return FieldResult(
-            field_name="producer",
+            field="producer",
             expected=expected or "",
-            extracted=extracted or "",
+            found=extracted or "",
             status="FAIL",
             score=0.0,
             message="Missing producer",
         )
 
     score = fuzz.token_set_ratio(expected.lower(), extracted.lower())
-    threshold = 80
+    threshold = 90
 
     if score >= threshold:
         return FieldResult(
-            field_name="producer",
+            field="producer",
             expected=expected,
-            extracted=extracted,
+            found=extracted,
             status="PASS",
             score=float(score),
             message=f"Producer match: fuzzy score {score:.1f}%",
         )
     else:
         return FieldResult(
-            field_name="producer",
+            field="producer",
             expected=expected,
-            extracted=extracted,
+            found=extracted,
             status="FAIL",
             score=float(score),
             message=f"Producer mismatch: fuzzy score {score:.1f}% below threshold {threshold}%",
@@ -151,9 +151,9 @@ def compare_country(expected: str, extracted: str) -> FieldResult:
     """
     if not expected or not extracted:
         return FieldResult(
-            field_name="country",
+            field="country",
             expected=expected or "",
-            extracted=extracted or "",
+            found=extracted or "",
             status="FAIL",
             score=None,
             message="Missing country",
@@ -163,9 +163,11 @@ def compare_country(expected: str, extracted: str) -> FieldResult:
     country_aliases = {
         "usa": "united states",
         "united states": "united states",
+        "united states of america": "united states",
         "us": "united states",
         "u.s.": "united states",
         "u.s.a.": "united states",
+        "america": "united states",
         "uk": "united kingdom",
         "united kingdom": "united kingdom",
         "england": "united kingdom",
@@ -176,6 +178,21 @@ def compare_country(expected: str, extracted: str) -> FieldResult:
         "soviet union": "russian federation",
         "czechia": "czech republic",
         "czech republic": "czech republic",
+        "france": "france",
+        "french republic": "france",
+        "italy": "italy",
+        "italia": "italy",
+        "italian republic": "italy",
+        "spain": "spain",
+        "espana": "spain",
+        "kingdom of spain": "spain",
+        "germany": "germany",
+        "deutschland": "germany",
+        "federal republic of germany": "germany",
+        "portugal": "portugal",
+        "portuguese republic": "portugal",
+        "australia": "australia",
+        "commonwealth of australia": "australia",
     }
 
     # Normalize to canonical form
@@ -184,18 +201,18 @@ def compare_country(expected: str, extracted: str) -> FieldResult:
 
     if expected_normalized == extracted_normalized:
         return FieldResult(
-            field_name="country",
+            field="country",
             expected=expected,
-            extracted=extracted,
+            found=extracted,
             status="PASS",
             score=None,
             message=f"Country match: {expected_normalized}",
         )
     else:
         return FieldResult(
-            field_name="country",
+            field="country",
             expected=expected,
-            extracted=extracted,
+            found=extracted,
             status="FAIL",
             score=None,
             message=f"Country mismatch: {expected_normalized} vs {extracted_normalized}",
@@ -214,9 +231,9 @@ def compare_abv(expected: str, extracted: str) -> FieldResult:
     """
     if not expected or not extracted:
         return FieldResult(
-            field_name="abv",
+            field="abv",
             expected=expected or "",
-            extracted=extracted or "",
+            found=extracted or "",
             status="FAIL",
             score=None,
             message="Missing ABV value",
@@ -233,6 +250,9 @@ def compare_abv(expected: str, extracted: str) -> FieldResult:
         match = re.search(r"(\d+(?:\.\d+)?)", value)
         if match and "%" in value:
             return float(match.group(1))
+        match = re.search(r"(\d+(?:\.\d+)?)\s*proof\b", value, flags=re.IGNORECASE)
+        if match:
+            return float(match.group(1)) / 2
         return None
 
     expected_val = extract_abv_value(expected)
@@ -240,25 +260,25 @@ def compare_abv(expected: str, extracted: str) -> FieldResult:
 
     if expected_val is None or extracted_val is None:
         return FieldResult(
-            field_name="abv",
+            field="abv",
             expected=expected,
-            extracted=extracted,
+            found=extracted,
             status="FAIL",
             score=None,
             message=f"Could not extract numeric ABV values",
         )
 
-    # Compare with tolerance of ±0.2% (with small epsilon for floating point precision)
-    tolerance = 0.2
+    # Compare with tolerance of ±0.1% (with small epsilon for floating point precision)
+    tolerance = 0.1
     epsilon = 1e-6
     difference = abs(expected_val - extracted_val)
 
     if difference <= (tolerance + epsilon):
         score = max(0, 100 - (difference / tolerance * 15))  # Scale to 0-100
         return FieldResult(
-            field_name="abv",
+            field="abv",
             expected=expected,
-            extracted=extracted,
+            found=extracted,
             status="PASS",
             score=float(score),
             message=f"ABV match: {expected_val}% vs {extracted_val}% (difference: {difference:.2f}%)",
@@ -266,9 +286,9 @@ def compare_abv(expected: str, extracted: str) -> FieldResult:
     else:
         score = max(0, 100 - (difference / tolerance * 100))
         return FieldResult(
-            field_name="abv",
+            field="abv",
             expected=expected,
-            extracted=extracted,
+            found=extracted,
             status="FAIL",
             score=float(score),
             message=f"ABV mismatch: {expected_val}% vs {extracted_val}% (difference: {difference:.2f}% exceeds ±{tolerance}%)",
@@ -287,9 +307,9 @@ def compare_net_contents(expected: str, extracted: str) -> FieldResult:
     """
     if not expected or not extracted:
         return FieldResult(
-            field_name="net_contents",
+            field="net_contents",
             expected=expected or "",
-            extracted=extracted or "",
+            found=extracted or "",
             status="FAIL",
             score=None,
             message="Missing net contents value",
@@ -330,9 +350,9 @@ def compare_net_contents(expected: str, extracted: str) -> FieldResult:
 
     if expected_ml is None or extracted_ml is None:
         return FieldResult(
-            field_name="net_contents",
+            field="net_contents",
             expected=expected,
-            extracted=extracted,
+            found=extracted,
             status="FAIL",
             score=None,
             message="Could not parse net contents values",
@@ -348,9 +368,9 @@ def compare_net_contents(expected: str, extracted: str) -> FieldResult:
     if difference <= effective_tolerance:
         score = max(0, 100 - (difference / effective_tolerance * 20))
         return FieldResult(
-            field_name="net_contents",
+            field="net_contents",
             expected=expected,
-            extracted=extracted,
+            found=extracted,
             status="PASS",
             score=float(score),
             message=f"Net contents match: {expected_ml:.1f} ml vs {extracted_ml:.1f} ml (difference: {difference:.1f} ml)",
@@ -358,9 +378,9 @@ def compare_net_contents(expected: str, extracted: str) -> FieldResult:
     else:
         score = max(0, 100 - (difference / effective_tolerance * 100))
         return FieldResult(
-            field_name="net_contents",
+            field="net_contents",
             expected=expected,
-            extracted=extracted,
+            found=extracted,
             status="FAIL",
             score=float(score),
             message=f"Net contents mismatch: {expected_ml:.1f} ml vs {extracted_ml:.1f} ml (difference: {difference:.1f} ml exceeds tolerance)",
@@ -379,9 +399,9 @@ def compare_government_warning(expected: str, extracted: Optional[str]) -> Field
     """
     if not expected:
         return FieldResult(
-            field_name="government_warning",
+            field="government_warning",
             expected=expected or "",
-            extracted=extracted or "",
+            found=extracted or "",
             status="FAIL",
             score=None,
             message="Missing expected government warning",
@@ -389,9 +409,9 @@ def compare_government_warning(expected: str, extracted: Optional[str]) -> Field
 
     if extracted is None or extracted == "":
         return FieldResult(
-            field_name="government_warning",
+            field="government_warning",
             expected=expected,
-            extracted=extracted or "",
+            found=extracted or "",
             status="FAIL",
             score=None,
             message="Government warning is missing from extracted label",
@@ -400,28 +420,31 @@ def compare_government_warning(expected: str, extracted: Optional[str]) -> Field
     # Exact case-sensitive comparison
     if expected == extracted:
         return FieldResult(
-            field_name="government_warning",
+            field="government_warning",
             expected=expected,
-            extracted=extracted,
+            found=extracted,
             status="PASS",
             score=None,
             message="Government warning matches exactly (case-sensitive)",
         )
     else:
         return FieldResult(
-            field_name="government_warning",
+            field="government_warning",
             expected=expected,
-            extracted=extracted,
+            found=extracted,
             status="FAIL",
             score=None,
-            message="Government warning does not match exactly. Case, punctuation, and whitespace must be exact.",
+            message=(
+                "Government warning does not match exactly. "
+                f"Found: {extracted}. Case, punctuation, and whitespace must be exact."
+            ),
         )
 
 
 def aggregate_verification(field_results: list[FieldResult]) -> VerificationResult:
     """Aggregate individual field results into overall verification verdict.
     
-    Rule: any FAIL => NEEDS_REVIEW, otherwise PASS
+    Rule: any FAIL => NEEDS_REVIEW, otherwise APPROVED
     
     Args:
         field_results: list of FieldResult from all field comparisons
@@ -429,18 +452,18 @@ def aggregate_verification(field_results: list[FieldResult]) -> VerificationResu
     Returns:
         VerificationResult with overall status and summary
     """
-    failed_fields = [fr.field_name for fr in field_results if fr.status == "FAIL"]
+    failed_fields = [fr.field for fr in field_results if fr.status == "FAIL"]
 
     if failed_fields:
-        overall_status = "NEEDS_REVIEW"
+        overall_verdict = "NEEDS_REVIEW"
         summary = f"Verification requires review: {len(failed_fields)} field(s) failed ({', '.join(failed_fields)})"
     else:
-        overall_status = "PASS"
+        overall_verdict = "APPROVED"
         summary = "All fields verified successfully"
 
     return VerificationResult(
         field_results=field_results,
-        overall_status=overall_status,
+        overall_verdict=overall_verdict,
         summary=summary,
         failed_fields=failed_fields if failed_fields else None,
         latency_ms=0.0,

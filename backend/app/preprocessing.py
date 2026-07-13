@@ -13,7 +13,7 @@ from PIL import Image, UnidentifiedImageError
 
 logger = logging.getLogger(__name__)
 
-ALLOWED_IMAGE_FORMATS = {"JPEG", "PNG"}
+ALLOWED_IMAGE_FORMATS = {"JPEG", "PNG", "WEBP", "GIF", "BMP", "TIFF"}
 MAX_IMAGE_PIXELS = 20_000_000
 DEFAULT_MAX_DIMENSION = 768
 DEFAULT_JPEG_QUALITY = 75
@@ -42,10 +42,10 @@ def get_image_dimensions(image_bytes: bytes) -> Tuple[int, int] | None:
 
 
 def inspect_image(image_bytes: bytes) -> ImageInfo:
-    """Validate uploaded bytes as a readable JPEG/PNG and return metadata.
+    """Validate uploaded bytes as a readable supported image and return metadata.
     
     Raises:
-        ValueError: if the image is not readable, is not JPEG/PNG, or is too large.
+        ValueError: if the image is not readable, is unsupported, or is too large.
     """
     try:
         with Image.open(io.BytesIO(image_bytes)) as img:
@@ -53,13 +53,13 @@ def inspect_image(image_bytes: bytes) -> ImageInfo:
             width, height = img.size
             img.verify()
     except (UnidentifiedImageError, OSError, ValueError) as exc:
-        raise ValueError("Image could not be read. Please choose a clear JPG or PNG image.") from exc
+        raise ValueError("Image could not be read. Please choose a clear image file.") from exc
 
     if image_format not in ALLOWED_IMAGE_FORMATS:
-        raise ValueError("Invalid image format. Please choose a JPG or PNG image.")
+        raise ValueError("Invalid image format. Please choose a supported image file.")
 
     if width <= 0 or height <= 0:
-        raise ValueError("Image could not be read. Please choose a clear JPG or PNG image.")
+        raise ValueError("Image could not be read. Please choose a clear image file.")
 
     if width * height > MAX_IMAGE_PIXELS:
         raise ValueError("Image dimensions are too large. Please choose a smaller photo.")

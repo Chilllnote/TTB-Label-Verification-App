@@ -105,8 +105,7 @@ async def main():
             vision_service = OpenAIVisionService()
         except ValueError as e:
             logger.error(f"Failed to initialize OpenAI: {e}")
-            logger.info("Falling back to mock service")
-            vision_service = MockVisionService()
+            return 1
     
     # Preprocess image
     logger.info("Preprocessing image...")
@@ -140,19 +139,19 @@ async def main():
     logger.info("Comparing extracted label against application data...")
     result = verify_label(app_data, extracted_label)
     
-    print(f"\nOverall Status: {result.overall_status}")
+    print(f"\nOverall Status: {result.overall_verdict}")
     print(f"Summary: {result.summary}\n")
     
     print("Field Results:")
     for fr in result.field_results:
         status_icon = "✓" if fr.status == "PASS" else "✗"
-        print(f"  {status_icon} {fr.field_name}")
+        print(f"  {status_icon} {fr.field}")
         print(f"    Expected: {fr.expected}")
-        print(f"    Extracted: {fr.extracted}")
+        print(f"    Found: {fr.found}")
         if fr.score is not None:
             print(f"    Score: {fr.score:.1f}%")
         print(f"    Message: {fr.message}\n")
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    raise SystemExit(asyncio.run(main()) or 0)

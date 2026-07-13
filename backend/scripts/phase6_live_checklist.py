@@ -99,11 +99,11 @@ def multipart_body(fields: dict[str, str], files: list[tuple[str, str, bytes, st
         chunks.append(value.encode())
         chunks.append(b"\r\n")
 
-    for field_name, filename, content, content_type in files:
+    for field, filename, content, content_type in files:
         chunks.append(f"--{boundary}\r\n".encode())
         chunks.append(
             (
-                f'Content-Disposition: form-data; name="{field_name}"; '
+                f'Content-Disposition: form-data; name="{field}"; '
                 f'filename="{filename}"\r\n'
                 f"Content-Type: {content_type}\r\n\r\n"
             ).encode()
@@ -190,8 +190,8 @@ def run_checks(base_url: str, *, mock_vision: bool = False) -> list[CheckResult]
             status,
             data,
             elapsed,
-            lambda s, d, e: s == 200 and d.get("overall_status") == "PASS",
-            f"status={status} overall={data.get('overall_status') if data else None}",
+            lambda s, d, e: s == 200 and d.get("overall_verdict") == "APPROVED",
+            f"status={status} overall={data.get('overall_verdict') if data else None}",
         )
     )
 
@@ -222,7 +222,7 @@ def run_checks(base_url: str, *, mock_vision: bool = False) -> list[CheckResult]
             data,
             elapsed,
             lambda s, d, e: s == 200
-            and d.get("overall_status") == "NEEDS_REVIEW"
+            and d.get("overall_verdict") == "NEEDS_REVIEW"
             and {"brand", "product_class", "producer", "country", "abv", "net_contents"}.issubset(
                 failed_fields(d)
             ),
@@ -241,8 +241,8 @@ def run_checks(base_url: str, *, mock_vision: bool = False) -> list[CheckResult]
             status,
             data,
             elapsed,
-            lambda s, d, e: s == 200 and d.get("overall_status") == "PASS",
-            f"status={status} overall={data.get('overall_status') if data else None}",
+            lambda s, d, e: s == 200 and d.get("overall_verdict") == "APPROVED",
+            f"status={status} overall={data.get('overall_verdict') if data else None}",
         )
     )
 
@@ -253,8 +253,8 @@ def run_checks(base_url: str, *, mock_vision: bool = False) -> list[CheckResult]
             status,
             data,
             elapsed,
-            lambda s, d, e: s == 200 and d.get("overall_status") == "PASS",
-            f"status={status} overall={data.get('overall_status') if data else None}",
+            lambda s, d, e: s == 200 and d.get("overall_verdict") == "APPROVED",
+            f"status={status} overall={data.get('overall_verdict') if data else None}",
         )
     )
 
@@ -278,7 +278,7 @@ def run_checks(base_url: str, *, mock_vision: bool = False) -> list[CheckResult]
             data,
             elapsed,
             lambda s, d, e: s == 200
-            and d.get("overall_status") == "NEEDS_REVIEW"
+            and d.get("overall_verdict") == "NEEDS_REVIEW"
             and "government_warning" in failed_fields(d),
             f"status={status} failed={sorted(failed_fields(data or {}))}",
         )
@@ -292,7 +292,7 @@ def run_checks(base_url: str, *, mock_vision: bool = False) -> list[CheckResult]
             data,
             elapsed,
             lambda s, d, e: s == 200
-            and d.get("overall_status") == "NEEDS_REVIEW"
+            and d.get("overall_verdict") == "NEEDS_REVIEW"
             and "government_warning" in failed_fields(d),
             f"status={status} failed={sorted(failed_fields(data or {}))}",
         )
@@ -305,8 +305,8 @@ def run_checks(base_url: str, *, mock_vision: bool = False) -> list[CheckResult]
             status,
             data,
             elapsed,
-            lambda s, d, e: s == 200 and d.get("overall_status") == "NEEDS_REVIEW" and e < 5000,
-            f"status={status} overall={data.get('overall_status') if data else None} client_ms={elapsed:.1f}",
+            lambda s, d, e: s == 200 and d.get("overall_verdict") == "NEEDS_REVIEW" and e < 5000,
+            f"status={status} overall={data.get('overall_verdict') if data else None} client_ms={elapsed:.1f}",
         )
     )
 
