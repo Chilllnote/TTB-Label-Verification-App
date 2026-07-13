@@ -17,6 +17,7 @@ from pydantic import ValidationError
 # Load environment variables from a .env file at the project root if present.
 load_dotenv(dotenv_path=Path(__file__).resolve().parents[2] / ".env")
 
+from app.config import runtime_int
 from app.comparison import verify_label
 from app.models import (
     ApplicationData,
@@ -39,7 +40,6 @@ logger = logging.getLogger(__name__)
 
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
 MAX_BATCH_SIZE = 5
-DEFAULT_BATCH_CONCURRENCY = 3
 SUPPORTED_IMAGE_TYPES = {
     "image/jpeg",
     "image/png",
@@ -230,21 +230,12 @@ def _validation_error_message(field_errors: list[dict[str, object]]) -> str:
     return f"Please fix: {', '.join(labels)}."
 
 
-def _env_int(name: str, default: int, minimum: int, maximum: int) -> int:
-    raw_value = os.getenv(name, str(default))
-    try:
-        value = int(raw_value)
-    except ValueError:
-        value = default
-    return min(maximum, max(minimum, value))
-
-
 def _preprocess_max_dimension() -> int:
-    return _env_int("PREPROCESS_MAX_DIMENSION", 768, 320, 1600)
+    return runtime_int("PREPROCESS_MAX_DIMENSION", 320, 1600)
 
 
 def _preprocess_jpeg_quality() -> int:
-    return _env_int("PREPROCESS_JPEG_QUALITY", 75, 50, 90)
+    return runtime_int("PREPROCESS_JPEG_QUALITY", 50, 90)
 
 
 async def _verify_uploaded_label(
@@ -347,12 +338,7 @@ async def _verify_uploaded_label(
 
 
 def _batch_concurrency_limit() -> int:
-    raw_value = os.getenv("BATCH_CONCURRENCY", str(DEFAULT_BATCH_CONCURRENCY))
-    try:
-        configured = int(raw_value)
-    except ValueError:
-        configured = DEFAULT_BATCH_CONCURRENCY
-    return min(MAX_BATCH_SIZE, max(1, configured))
+    return runtime_int("BATCH_CONCURRENCY", 1, MAX_BATCH_SIZE)
 
 
 def _plain_item_error(exc: HTTPException) -> str:

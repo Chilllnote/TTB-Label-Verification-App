@@ -7,6 +7,7 @@ import pytest
 from fastapi import HTTPException
 from PIL import Image
 
+from app import config
 from app.main import verify_batch_endpoint, verify_endpoint
 from app.models import ExtractedLabel
 from app.vision_service import MockVisionService, VisionServiceUnavailableError
@@ -422,9 +423,23 @@ def test_verify_batch_endpoint_rejects_missing_required_fields():
     ]
 
 
-def test_verify_batch_endpoint_processes_concurrently_with_bound(monkeypatch):
+def test_verify_batch_endpoint_processes_concurrently_with_bound(monkeypatch, tmp_path):
     service = SlowVisionService(delay=0.2)
-    monkeypatch.setenv("BATCH_CONCURRENCY", "3")
+    dotenv_path = tmp_path / ".env"
+    dotenv_path.write_text(
+        "\n".join(
+            [
+                "OPENAI_VISION_MODEL=gpt-4o-mini",
+                "OPENAI_TIMEOUT_SECONDS=3.8",
+                "OPENAI_IMAGE_DETAIL=high",
+                "PREPROCESS_MAX_DIMENSION=768",
+                "PREPROCESS_JPEG_QUALITY=75",
+                "BATCH_CONCURRENCY=3",
+            ]
+        )
+        + "\n"
+    )
+    monkeypatch.setattr(config, "DOTENV_PATH", dotenv_path)
 
     start = time.perf_counter()
     result = run(

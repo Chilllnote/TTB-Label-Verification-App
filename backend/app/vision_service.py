@@ -13,6 +13,7 @@ from typing import Optional
 
 from pydantic import ValidationError
 
+from app.config import runtime_float, runtime_setting
 from app.models import ExtractedLabel
 
 logger = logging.getLogger(__name__)
@@ -28,15 +29,6 @@ class VisionServiceUnavailableError(VisionExtractionError):
 
 class VisionResponseParseError(VisionExtractionError):
     """Raised when the vision provider returns malformed extraction data."""
-
-
-def _env_float(name: str, default: float, minimum: float, maximum: float) -> float:
-    raw_value = os.getenv(name, str(default))
-    try:
-        value = float(raw_value)
-    except ValueError:
-        value = default
-    return min(maximum, max(minimum, value))
 
 
 class VisionService(ABC):
@@ -84,11 +76,11 @@ class OpenAIVisionService(VisionService):
             raise ValueError("OPENAI_API_KEY environment variable not set")
         from openai import AsyncOpenAI
 
-        self.model_name = os.getenv("OPENAI_VISION_MODEL", "gpt-4o-mini").strip() or "gpt-4o-mini"
-        self.timeout_seconds = _env_float("OPENAI_TIMEOUT_SECONDS", 3.8, 1.0, 4.5)
-        self.image_detail = os.getenv("OPENAI_IMAGE_DETAIL", "high").strip().lower()
+        self.model_name = runtime_setting("OPENAI_VISION_MODEL").strip()
+        self.timeout_seconds = runtime_float("OPENAI_TIMEOUT_SECONDS", 1.0, 30.0)
+        self.image_detail = runtime_setting("OPENAI_IMAGE_DETAIL").strip().lower()
         if self.image_detail not in {"low", "high", "auto"}:
-            self.image_detail = "high"
+            raise ValueError("OPENAI_IMAGE_DETAIL must be low, high, or auto")
 
         self.client = AsyncOpenAI(
             api_key=api_key,
