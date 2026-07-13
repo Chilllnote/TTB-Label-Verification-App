@@ -17,7 +17,7 @@ from pydantic import ValidationError
 # Load environment variables from a .env file at the project root if present.
 load_dotenv(dotenv_path=Path(__file__).resolve().parents[2] / ".env")
 
-from app.config import runtime_int
+from app.config import runtime_bool, runtime_choice, runtime_int
 from app.comparison import verify_label
 from app.models import (
     ApplicationData,
@@ -238,6 +238,18 @@ def _preprocess_jpeg_quality() -> int:
     return runtime_int("PREPROCESS_JPEG_QUALITY", 50, 90)
 
 
+def _preprocess_grayscale() -> bool:
+    return runtime_bool("PREPROCESS_GRAYSCALE")
+
+
+def _preprocess_threshold() -> str:
+    return runtime_choice("PREPROCESS_THRESHOLD", {"off", "binary", "adaptive"})
+
+
+def _preprocess_contrast() -> bool:
+    return runtime_bool("PREPROCESS_CONTRAST")
+
+
 async def _verify_uploaded_label(
     image: UploadFile,
     application_data_model: ApplicationData,
@@ -290,6 +302,9 @@ async def _verify_uploaded_label(
         image_bytes,
         max_dimension=_preprocess_max_dimension(),
         jpeg_quality=_preprocess_jpeg_quality(),
+        grayscale=_preprocess_grayscale(),
+        threshold_mode=_preprocess_threshold(),
+        enhance_contrast=_preprocess_contrast(),
     )
     metrics.preprocess_ms = round((time.perf_counter() - preprocess_start) * 1000, 1)
     metrics.preprocessed_bytes = len(preprocessed_bytes)

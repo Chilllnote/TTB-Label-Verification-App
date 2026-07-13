@@ -33,14 +33,14 @@ class VisionResponseParseError(VisionExtractionError):
 
 class VisionService(ABC):
     """Abstract base class for label extraction from images."""
-    
+
     @abstractmethod
     async def extract(self, image_bytes: bytes) -> ExtractedLabel:
         """Extract label fields from image.
-        
+
         Args:
             image_bytes: JPEG/PNG image bytes
-        
+
         Returns:
             ExtractedLabel with fields populated or null.
 
@@ -62,13 +62,13 @@ class UnavailableVisionService(VisionService):
 
 class OpenAIVisionService(VisionService):
     """OpenAI vision service with structured JSON output.
-    
+
     Uses response_format with explicit JSON schema for guaranteed structure.
     Defensive parsing raises typed exceptions for malformed responses.
     Timeouts and API errors raise typed exceptions so reviewers do not see
     infrastructure failures as label mismatches.
     """
-    
+
     def __init__(self):
         """Initialize OpenAI client from OPENAI_API_KEY environment variable."""
         api_key = os.getenv("OPENAI_API_KEY")
@@ -87,10 +87,10 @@ class OpenAIVisionService(VisionService):
             timeout=self.timeout_seconds,
             max_retries=1,
         )
-    
+
     async def extract(self, image_bytes: bytes) -> ExtractedLabel:
         """Extract label fields from image using GPT-4o.
-        
+
         Returns ExtractedLabel on successful extraction. Non-label images can
         still return null fields from the model, but provider and parse failures
         raise typed exceptions.
@@ -98,13 +98,13 @@ class OpenAIVisionService(VisionService):
         try:
             # Encode image to base64 for API
             image_b64 = base64.standard_b64encode(image_bytes).decode("utf-8")
-            
+
             # Build a compact extraction prompt (critical: verbatim warning instruction).
             system_prompt = (
                 "Extract alcohol or tobacco label fields. Return only JSON matching "
                 "the schema. Use null for unreadable fields."
             )
-            
+
             user_prompt = (
                 "Extract: brand, class, producer, country, abv, net_contents, "
                 "government_warning, raw_text, extraction_confidence. "
@@ -115,7 +115,11 @@ class OpenAIVisionService(VisionService):
                 "displayed, preserving case, punctuation, spacing, and line breaks. "
                 "Do not normalize or correct the warning. Use null when unclear."
             )
-            
+
+            logger.info(
+                f"Calling vision model {self.model_name} with timeout {self.timeout_seconds}s"
+            )
+
             # Call the configured vision model with explicit JSON schema.
             response = await self.client.chat.completions.create(
                 model=self.model_name,
@@ -129,11 +133,11 @@ class OpenAIVisionService(VisionService):
                                 "type": "image_url",
                                 "image_url": {
                                     "url": f"data:image/jpeg;base64,{image_b64}",
-                                    "detail": self.image_detail
-                                }
-                            }
-                        ]
-                    }
+                                    "detail": self.image_detail,
+                                },
+                            },
+                        ],
+                    },
                 ],
                 response_format={
                     "type": "json_schema",
@@ -158,28 +162,36 @@ class OpenAIVisionService(VisionService):
                                 },
                             },
                             "required": [
-                                "brand", "class", "producer", "country",
-                                "abv", "net_contents", "government_warning",
-                                "raw_text", "extraction_confidence"
+                                "brand",
+                                "class",
+                                "producer",
+                                "country",
+                                "abv",
+                                "net_contents",
+                                "government_warning",
+                                "raw_text",
+                                "extraction_confidence",
                             ],
-                            "additionalProperties": False
-                        }
-                    }
+                            "additionalProperties": False,
+                        },
+                    },
                 },
                 temperature=0,
-                max_tokens=500,
+                max_completion_tokens=500,
                 timeout=self.timeout_seconds,
             )
-            
+
             # Parse JSON response defensively
             response_json = json.loads(response.choices[0].message.content)
             extracted = ExtractedLabel(**response_json)
             logger.info(f"Extracted label: {extracted}")
             return extracted
-            
+
         except ValidationError as e:
             logger.error(f"Malformed extraction JSON (Pydantic validation failed): {e}")
-            raise VisionResponseParseError("Vision response did not match the extraction schema") from e
+            raise VisionResponseParseError(
+                "Vision response did not match the extraction schema"
+            ) from e
         except json.JSONDecodeError as e:
             logger.error(f"Malformed extraction JSON (invalid JSON): {e}")
             raise VisionResponseParseError("Vision response was not valid JSON") from e
@@ -187,26 +199,32 @@ class OpenAIVisionService(VisionService):
             error_name = e.__class__.__name__
             if error_name in {"APIConnectionError", "APITimeoutError", "Timeout"}:
                 logger.error(f"Vision API network error ({error_name}): {e}")
-                raise VisionServiceUnavailableError("Vision service could not be reached") from e
+                raise VisionServiceUnavailableError(
+                    "Vision service could not be reached"
+                ) from e
             elif error_name == "RateLimitError":
                 logger.error(f"Vision API rate limited: {e}")
-                raise VisionServiceUnavailableError("Vision service is rate limited") from e
+                raise VisionServiceUnavailableError(
+                    "Vision service is rate limited"
+                ) from e
             else:
                 logger.error(f"Unexpected vision service error: {e}")
-                raise VisionExtractionError("Vision extraction failed") from e
+                raise VisionExtractionError(
+                    f"Vision extraction failed. Using: {self.model_name}"
+                ) from e
 
 
 class MockVisionService(VisionService):
     """Mock VisionService for testing (no API calls).
-    
+
     Returns fixed ExtractedLabel objects. Can be configured per test.
     When using the default response, simple color markers in synthetic test
     images can simulate unreadable or missing-warning extraction outcomes.
     """
-    
+
     def __init__(self, response: Optional[ExtractedLabel] = None):
         """Initialize with optional fixed response.
-        
+
         Args:
             response: ExtractedLabel to return. Defaults to realistic label.
         """
@@ -218,7 +236,7 @@ class MockVisionService(VisionService):
             country="Russia",
             abv="40%",
             net_contents="750 ml",
-            government_warning="WARNING: CONTAINS ALCOHOL"
+            government_warning="WARNING: CONTAINS ALCOHOL",
         )
 
     def _marker_response(self, image_bytes: bytes) -> Optional[ExtractedLabel]:
@@ -279,7 +297,7 @@ class MockVisionService(VisionService):
             )
 
         return None
-    
+
     async def extract(self, image_bytes: bytes) -> ExtractedLabel:
         """Return fixed mock response."""
         marker_response = self._marker_response(image_bytes)

@@ -15,6 +15,9 @@ DOTENV_ONLY_SETTINGS = {
     "OPENAI_IMAGE_DETAIL",
     "PREPROCESS_MAX_DIMENSION",
     "PREPROCESS_JPEG_QUALITY",
+    "PREPROCESS_GRAYSCALE",
+    "PREPROCESS_THRESHOLD",
+    "PREPROCESS_CONTRAST",
     "BATCH_CONCURRENCY",
 }
 
@@ -59,4 +62,21 @@ def runtime_int(name: str, minimum: int, maximum: int) -> int:
 
     if not minimum <= value <= maximum:
         raise ValueError(f"{name} must be between {minimum} and {maximum}")
+    return value
+
+
+def runtime_bool(name: str) -> bool:
+    raw_value = runtime_setting(name).strip().lower()
+    if raw_value in {"true", "1", "yes", "on"}:
+        return True
+    if raw_value in {"false", "0", "no", "off"}:
+        return False
+    raise ValueError(f"{name} must be true or false")
+
+
+def runtime_choice(name: str, allowed: set[str]) -> str:
+    value = runtime_setting(name).strip().lower()
+    if value not in allowed:
+        allowed_values = ", ".join(sorted(allowed))
+        raise ValueError(f"{name} must be one of: {allowed_values}")
     return value

@@ -43,6 +43,61 @@ class TestImagePreprocessing:
         # Result should be JPEG (starts with JPEG magic bytes)
         assert result.startswith(b'\xff\xd8')  # JPEG magic
 
+    def test_preprocess_does_not_upscale_small_images(self):
+        """Small images should not be enlarged by preprocessing."""
+        from PIL import Image
+        import io
+
+        img = Image.new("RGB", (503, 373), color=(255, 255, 255))
+        buffer = io.BytesIO()
+        img.save(buffer, format="JPEG")
+
+        result = preprocess_image(buffer.getvalue(), max_dimension=1024, jpeg_quality=70)
+        output = Image.open(io.BytesIO(result))
+
+        assert output.size == (503, 373)
+
+    def test_preprocess_grayscale_outputs_valid_jpeg(self):
+        """Grayscale mode should produce a readable JPEG with equal RGB channels."""
+        from PIL import Image
+        import io
+
+        img = Image.new("RGB", (320, 240), color=(80, 150, 220))
+        buffer = io.BytesIO()
+        img.save(buffer, format="PNG")
+
+        result = preprocess_image(buffer.getvalue(), grayscale=True, jpeg_quality=70)
+        output = Image.open(io.BytesIO(result)).convert("RGB")
+        red, green, blue = output.getpixel((10, 10))
+
+        assert result.startswith(b'\xff\xd8')
+        assert abs(red - green) <= 2
+        assert abs(green - blue) <= 2
+
+    def test_preprocess_binary_threshold_outputs_black_and_white_jpeg(self):
+        """Binary threshold mode should produce only near-black/near-white pixels."""
+        from PIL import Image, ImageDraw
+        import io
+
+        img = Image.new("RGB", (320, 240), color=(255, 255, 255))
+        draw = ImageDraw.Draw(img)
+        draw.rectangle((0, 0, 160, 240), fill=(20, 20, 20))
+        buffer = io.BytesIO()
+        img.save(buffer, format="PNG")
+
+        result = preprocess_image(
+            buffer.getvalue(),
+            grayscale=True,
+            threshold_mode="binary",
+            jpeg_quality=90,
+        )
+        output = Image.open(io.BytesIO(result)).convert("L")
+        pixels = [output.getpixel((20, 20)), output.getpixel((300, 20))]
+
+        assert result.startswith(b'\xff\xd8')
+        assert pixels[0] < 20
+        assert pixels[1] > 235
+
 
 class TestMockVisionService:
     """Test MockVisionService returns fixed responses."""

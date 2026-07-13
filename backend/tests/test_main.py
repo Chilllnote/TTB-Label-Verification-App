@@ -430,10 +430,13 @@ def test_verify_batch_endpoint_processes_concurrently_with_bound(monkeypatch, tm
         "\n".join(
             [
                 "OPENAI_VISION_MODEL=gpt-4o-mini",
-                "OPENAI_TIMEOUT_SECONDS=3.8",
+                "OPENAI_TIMEOUT_SECONDS=20",
                 "OPENAI_IMAGE_DETAIL=high",
-                "PREPROCESS_MAX_DIMENSION=768",
-                "PREPROCESS_JPEG_QUALITY=75",
+                "PREPROCESS_MAX_DIMENSION=1024",
+                "PREPROCESS_JPEG_QUALITY=70",
+                "PREPROCESS_GRAYSCALE=true",
+                "PREPROCESS_THRESHOLD=off",
+                "PREPROCESS_CONTRAST=true",
                 "BATCH_CONCURRENCY=3",
             ]
         )
