@@ -83,13 +83,18 @@ Open:
 | `USE_MOCK_VISION` | Use deterministic mock extraction instead of OpenAI. | `false` unless set |
 | `OPENAI_API_KEY` | Required only for real OpenAI vision mode. | unset |
 | `OPENAI_VISION_MODEL` | Vision model for real OpenAI mode. | `gpt-4o-mini` |
-| `OPENAI_TIMEOUT_SECONDS` | OpenAI request timeout. | `3.8` |
+| `OPENAI_TIMEOUT_SECONDS` | OpenAI request timeout. | `20` |
 | `OPENAI_IMAGE_DETAIL` | OpenAI image detail setting. | `high` |
-| `PREPROCESS_MAX_DIMENSION` | Long-edge image resize target. | `768` |
-| `PREPROCESS_JPEG_QUALITY` | JPEG quality after preprocessing. | `75` |
+| `PREPROCESS_MAX_DIMENSION` | Long-edge image resize target. Images are only downscaled, never upscaled. | `1024` |
+| `PREPROCESS_JPEG_QUALITY` | JPEG quality after preprocessing. | `70` |
+| `PREPROCESS_GRAYSCALE` | Convert image to grayscale before sending to vision. | `true` |
+| `PREPROCESS_THRESHOLD` | Optional black/white threshold mode: `off`, `binary`, or `adaptive`. | `off` |
+| `PREPROCESS_CONTRAST` | Apply light contrast/sharpening before threshold-capable preprocessing. | `true` |
 | `BATCH_CONCURRENCY` | Max concurrent batch item checks. | `3` |
 
 Secrets must stay in local `.env` files or deployment environment variables. Do not commit real API keys.
+
+For local runs, `OPENAI_VISION_MODEL`, `OPENAI_TIMEOUT_SECONDS`, `OPENAI_IMAGE_DETAIL`, `PREPROCESS_MAX_DIMENSION`, `PREPROCESS_JPEG_QUALITY`, `PREPROCESS_GRAYSCALE`, `PREPROCESS_THRESHOLD`, `PREPROCESS_CONTRAST`, and `BATCH_CONCURRENCY` are read from the project `.env` file when that file exists. Railway does not receive `.env`, so the deployed container reads those same keys from Railway environment variables.
 
 ## Testing
 
@@ -283,8 +288,11 @@ Set Railway environment variables:
 ```bash
 USE_MOCK_VISION=false
 OPENAI_API_KEY=<set in Railway environment only>
-PREPROCESS_MAX_DIMENSION=768
-PREPROCESS_JPEG_QUALITY=75
+PREPROCESS_MAX_DIMENSION=1024
+PREPROCESS_JPEG_QUALITY=70
+PREPROCESS_GRAYSCALE=true
+PREPROCESS_THRESHOLD=off
+PREPROCESS_CONTRAST=true
 BATCH_CONCURRENCY=3
 ```
 
