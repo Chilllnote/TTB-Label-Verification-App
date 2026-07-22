@@ -5,6 +5,7 @@ structured JSON output + defensive parsing, and mock for testing.
 """
 
 import base64
+import io
 import json
 import logging
 import os
@@ -14,9 +15,62 @@ from typing import Optional
 from pydantic import ValidationError
 
 from app.config import runtime_float, runtime_setting
+from app.extraction_postprocess import postprocess_extraction
 from app.models import ExtractedLabel
 
 logger = logging.getLogger(__name__)
+
+
+def _image_data_url(image_bytes: bytes) -> str:
+    image_b64 = base64.standard_b64encode(image_bytes).decode("utf-8")
+    return f"data:image/jpeg;base64,{image_b64}"
+
+
+def _rotate_image_bytes(image_bytes: bytes, degrees: int) -> Optional[bytes]:
+    """Return a JPEG copy rotated by degrees, or None if rotation fails."""
+    try:
+        from PIL import Image
+
+        with Image.open(io.BytesIO(image_bytes)) as img:
+            if img.mode != "RGB":
+                img = img.convert("RGB")
+            rotated = img.rotate(degrees, expand=True, fillcolor=(255, 255, 255))
+            output = io.BytesIO()
+            rotated.save(output, format="JPEG", quality=55, optimize=True)
+            return output.getvalue()
+    except Exception as exc:
+        logger.warning("Could not create rotated vision image: %s", exc)
+        return None
+
+
+def _build_vision_content(
+    user_prompt: str, image_bytes: bytes, image_detail: str
+) -> list[dict[str, object]]:
+    """Build one request containing the uploaded view and an upside-down view."""
+    content: list[dict[str, object]] = [{"type": "text", "text": user_prompt}]
+    content.append(
+        {
+            "type": "image_url",
+            "image_url": {
+                "url": _image_data_url(image_bytes),
+                "detail": image_detail,
+            },
+        }
+    )
+
+    rotated_bytes = _rotate_image_bytes(image_bytes, 180)
+    if rotated_bytes:
+        content.append(
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": _image_data_url(rotated_bytes),
+                    "detail": image_detail,
+                },
+            }
+        )
+
+    return content
 
 
 class VisionExtractionError(Exception):
@@ -96,21 +150,36 @@ class OpenAIVisionService(VisionService):
         raise typed exceptions.
         """
         try:
-            # Encode image to base64 for API
-            image_b64 = base64.standard_b64encode(image_bytes).decode("utf-8")
-
             # Build a compact extraction prompt (critical: verbatim warning instruction).
             system_prompt = (
-                "Extract alcohol or tobacco label fields. Return only JSON matching "
-                "the schema. Use null for unreadable fields."
+                "Extract alcohol or tobacco label fields from the entire image, "
+                "including small back labels, side panels, and collage panels. "
+                "Return only JSON matching the schema. Use null only when a field "
+                "is genuinely unreadable after inspecting all visible label text."
             )
 
             user_prompt = (
                 "Extract: brand, class, producer, country, abv, net_contents, "
                 "government_warning, raw_text, extraction_confidence. "
-                "Copy abv/net_contents as shown. Put all readable label text in "
-                "raw_text. Use extraction_confidence from 0 to 1 for overall "
-                "field extraction confidence. "
+                "You may receive the same photo in more than one orientation. "
+                "Use whichever view makes the label text readable, and merge the "
+                "best reading into one JSON result. "
+                "Read every visible label panel before deciding a field is missing. "
+                "Copy abv/net_contents as shown. Put concise useful label text "
+                "in raw_text, focusing on brand, class, producer/bottler/importer, "
+                "origin/country, abv, net contents, and government warning. "
+                "Do not include duplicate text from both orientations. Use "
+                "extraction_confidence from 0 to 1 for overall field extraction "
+                "confidence. "
+                "Producer means the named responsible producer/bottler/distiller/"
+                "brewer/vintner/importer shown after phrases like Produced by, "
+                "Bottled by, Produced and Bottled by, Imported by, Distilled by, "
+                "or Brewed by. "
+                "Country means origin. If text says Produced in Canada, Product "
+                "of Canada, Made in Canada, or similar, country is Canada. If "
+                "text says Produced/Bottled/Distilled/Brewed in a U.S. city and "
+                "state such as Kingston, NY, country is United States. U.S. state "
+                "abbreviations imply United States. "
                 "For government_warning, copy character-for-character exactly as "
                 "displayed, preserving case, punctuation, spacing, and line breaks. "
                 "Do not normalize or correct the warning. Use null when unclear."
@@ -127,16 +196,9 @@ class OpenAIVisionService(VisionService):
                     {"role": "system", "content": system_prompt},
                     {
                         "role": "user",
-                        "content": [
-                            {"type": "text", "text": user_prompt},
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/jpeg;base64,{image_b64}",
-                                    "detail": self.image_detail,
-                                },
-                            },
-                        ],
+                        "content": _build_vision_content(
+                            user_prompt, image_bytes, self.image_detail
+                        ),
                     },
                 ],
                 response_format={
@@ -177,13 +239,13 @@ class OpenAIVisionService(VisionService):
                     },
                 },
                 temperature=0,
-                max_completion_tokens=500,
+                max_completion_tokens=1200,
                 timeout=self.timeout_seconds,
             )
 
             # Parse JSON response defensively
             response_json = json.loads(response.choices[0].message.content)
-            extracted = ExtractedLabel(**response_json)
+            extracted = postprocess_extraction(ExtractedLabel(**response_json))
             logger.info(f"Extracted label: {extracted}")
             return extracted
 

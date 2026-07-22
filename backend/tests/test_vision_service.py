@@ -1,11 +1,12 @@
 """Unit tests for VisionService and image preprocessing."""
 
 import asyncio
+import inspect
 import pytest
 
 from app.models import ExtractedLabel
 from app.preprocessing import preprocess_image
-from app.vision_service import MockVisionService
+from app.vision_service import MockVisionService, _build_vision_content
 
 
 class TestImagePreprocessing:
@@ -56,6 +57,27 @@ class TestImagePreprocessing:
         output = Image.open(io.BytesIO(result))
 
         assert output.size == (503, 373)
+
+    def test_preprocess_applies_exif_orientation(self):
+        """Phone/camera EXIF rotation should be applied before vision."""
+        from PIL import Image
+        import io
+
+        img = Image.new("RGB", (80, 40), color=(255, 255, 255))
+        exif = Image.Exif()
+        exif[274] = 6
+
+        buffer = io.BytesIO()
+        img.save(buffer, format="JPEG", exif=exif)
+
+        result = preprocess_image(
+            buffer.getvalue(),
+            max_dimension=1024,
+            jpeg_quality=70,
+        )
+        output = Image.open(io.BytesIO(result))
+
+        assert output.size == (40, 80)
 
     def test_preprocess_grayscale_outputs_valid_jpeg(self):
         """Grayscale mode should produce a readable JPEG with equal RGB channels."""
@@ -169,6 +191,37 @@ class TestMockVisionService:
         assert result.abv is None
         assert result.net_contents is None
         assert result.government_warning is None
+
+
+class TestOpenAIVisionRequest:
+    """Test request construction that happens before the OpenAI call."""
+
+    def test_build_vision_content_includes_rotated_view(self):
+        """OpenAI request should include original and 180-degree fallback views."""
+        from PIL import Image
+        import io
+
+        img = Image.new("RGB", (80, 40), color=(255, 255, 255))
+        buffer = io.BytesIO()
+        img.save(buffer, format="JPEG")
+
+        content = _build_vision_content("Extract fields", buffer.getvalue(), "high")
+
+        image_parts = [part for part in content if part["type"] == "image_url"]
+
+        assert content[0] == {"type": "text", "text": "Extract fields"}
+        assert len(image_parts) == 2
+        assert image_parts[0]["image_url"]["url"].startswith("data:image/jpeg;base64,")
+        assert image_parts[1]["image_url"]["url"].startswith("data:image/jpeg;base64,")
+        assert image_parts[0]["image_url"]["url"] != image_parts[1]["image_url"]["url"]
+
+    def test_openai_completion_cap_allows_full_json_response(self):
+        """Structured JSON extraction needs room for warnings and raw text."""
+        from app.vision_service import OpenAIVisionService
+
+        source = inspect.getsource(OpenAIVisionService.extract)
+
+        assert "max_completion_tokens=1200" in source
 
 
 class TestVisionServiceIntegration:

@@ -106,8 +106,9 @@ def preprocess_image(
     and logs warning. Never throws exception.
     """
     try:
-        # Load image
+        # Load image and apply phone/camera orientation metadata before resizing.
         img = Image.open(io.BytesIO(image_bytes))
+        img = ImageOps.exif_transpose(img)
 
         # Convert RGBA/palette modes to RGB for JPEG compatibility
         if img.mode in ("RGBA", "LA", "P", "1"):
