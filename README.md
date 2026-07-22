@@ -45,7 +45,7 @@ The frontend is plain HTML/CSS/JavaScript served by FastAPI. It is designed for 
 - Plain HTML/CSS/JavaScript frontend
 - Railway deployment
 
-Exact vision model: `gpt-4o-mini`, configured by `OPENAI_VISION_MODEL` and used by `OpenAIVisionService`. On July 12, 2026, this model was checked against OpenAI's current model documentation; the GPT-4o mini page lists text and image input, text output, Structured Outputs support, and the `gpt-4o-mini` alias/snapshot family.
+Exact vision model: `gpt-5.4-nano`, configured by `OPENAI_VISION_MODEL` and used by `OpenAIVisionService`. On July 12, 2026, this model was checked against OpenAI's current model documentation; the GPT-5.4-nano page lists text and image input, text output, Structured Outputs support, and the `gpt-5.4-nano` alias/snapshot family.
 
 ## Local Setup
 
