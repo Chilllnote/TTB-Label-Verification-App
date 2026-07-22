@@ -4,10 +4,10 @@ Proof-of-concept web app for checking alcohol/tobacco label photos against expec
 
 ## Live Demo
 
-- App: `https://ttb-label-verification-app-production-ec48.up.railway.app`
-- Health check: `https://ttb-label-verification-app-production-ec48.up.railway.app/health`
+- App: `https://ttb-label-verification-app-v2-production.up.railway.app`
+- Health check: `https://ttb-label-verification-app-v2-production.up.railway.app/health`
 
-The submission deployment is configured to run the real OpenAI vision service with `USE_MOCK_VISION=false`. A valid `OPENAI_API_KEY` must be present in Railway environment variables for `/verify` to return successful real-provider results.
+The current deployment is the fresh Railway `TTB-Label-Verification-App-v2` service, configured to run the real OpenAI vision service with `USE_MOCK_VISION=false`. A valid `OPENAI_API_KEY` must be present in Railway environment variables for `/verify` to return successful real-provider results.
 
 ## What It Does
 
@@ -26,6 +26,9 @@ The comparison layer is intentionally stricter for the government warning than f
 
 - Brand, class/type, and producer use fuzzy matching with a 90% threshold.
 - Country uses simple synonym normalization.
+- If the vision model leaves country or producer blank, the backend conservatively fills them from clear raw label text such as `PRODUCED IN CANADA` or `Produced and Bottled By Lighthouse Vintners Kingston, NY`.
+- Real vision requests include the uploaded view plus an upside-down view in the same model call, so labels whose pixels are actually flipped have a better chance of being read without a second provider request.
+- The real vision response allows enough completion tokens for structured JSON with warning text and concise raw text, avoiding truncated JSON responses.
 - ABV uses numeric/proof normalization with ±0.1% tolerance; net contents uses unit normalization.
 - Government warning must match exactly, including capitalization, punctuation, spacing, and line breaks.
 - Vision provider failures return a distinct unreadable-photo error instead of field mismatches.
@@ -129,7 +132,7 @@ Latest deployed measurement, run July 12, 2026:
 
 ```bash
 cd backend
-.venv/bin/python scripts/benchmark_live.py https://ttb-label-verification-app-production-ec48.up.railway.app 5 30
+.venv/bin/python scripts/benchmark_live.py https://ttb-label-verification-app-v2-production.up.railway.app 5 30
 ```
 
 Result:
@@ -143,7 +146,7 @@ Result:
 | All-attempt p95 latency | `1057.8 ms` |
 | HTTP statuses | `[503, 503, 503, 503, 503]` |
 
-The current Railway app is reachable (`/health` returns `{"status":"ok"}`), but `/verify` returned `503` with `We could not read this photo. Please try again with a clear label photo.` for every benchmark attempt. That means the successful real-provider p50/p95 required for final review still needs to be rerun after Railway has a valid `OPENAI_API_KEY`, quota, and provider access.
+The current Railway app is reachable (`/health` returns `{"status":"ok"}` on July 21, 2026). The successful real-provider p50/p95 required for final review still needs to be rerun after any deployment/configuration changes.
 
 Railway cold-start note: the first request after inactivity may include container startup time. Treat the first benchmark sample separately when collecting final p50/p95 numbers for the 5-second target.
 
@@ -152,7 +155,7 @@ Railway cold-start note: the first request after inactivity may include containe
 Set the deployed base URL:
 
 ```bash
-BASE_URL="https://ttb-label-verification-app-production-ec48.up.railway.app"
+BASE_URL="https://ttb-label-verification-app-v2-production.up.railway.app"
 ```
 
 Single-label `/verify` request:
