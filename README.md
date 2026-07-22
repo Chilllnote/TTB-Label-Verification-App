@@ -85,7 +85,7 @@ Open:
 | --- | --- | --- |
 | `USE_MOCK_VISION` | Use deterministic mock extraction instead of OpenAI. | `false` unless set |
 | `OPENAI_API_KEY` | Required only for real OpenAI vision mode. | unset |
-| `OPENAI_VISION_MODEL` | Vision model for real OpenAI mode. | `gpt-4o-mini` |
+| `OPENAI_VISION_MODEL` | Vision model for real OpenAI mode. | `gpt-5.4-nano` |
 | `OPENAI_TIMEOUT_SECONDS` | OpenAI request timeout. | `20` |
 | `OPENAI_IMAGE_DETAIL` | OpenAI image detail setting. | `high` |
 | `PREPROCESS_MAX_DIMENSION` | Long-edge image resize target. Images are only downscaled, never upscaled. | `1024` |
