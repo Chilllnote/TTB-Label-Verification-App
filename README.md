@@ -4,8 +4,7 @@ Proof-of-concept web app for matching alcohol label images against submitted TTB
 
 ## Live Demo
 
-- App: `https://ttb-label-verification-app-production-ec48.up.railway.app`
-- Health check: `https://ttb-label-verification-app-production-ec48.up.railway.app/health`
+- App: `https://ttb-label-verification-app-v2-production.up.railway.app`
 
 The submission deployment is configured to run the real OpenAI vision service with `USE_MOCK_VISION=false`. A valid `OPENAI_API_KEY` must be present in Railway environment variables for `/verify` to return successful real-provider results.
 
