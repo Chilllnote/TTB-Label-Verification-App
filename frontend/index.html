@@ -3,97 +3,225 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Label Check</title>
+  <title>TTB Application Matching</title>
   <link rel="stylesheet" href="/static/styles.css" />
-
 </head>
 <body>
-  <main>
-    <h1>Label Check</h1>
-    <p class="intro">Choose label photos, fill in the boxes, and check the result.</p>
+  <div class="app-shell">
+    <aside class="side-nav" aria-label="Application matching sections">
+      <div>
+        <h1>TTB Match</h1>
+        <p>Application label matching</p>
+      </div>
+      <nav>
+        <button class="nav-button active" type="button" data-view="table-view">Table</button>
+        <button class="nav-button" type="button" data-view="upload-view">Upload Application</button>
+        <button class="nav-button" type="button" data-view="batch-view">Batch Upload</button>
+      </nav>
+    </aside>
 
-    <div class="mode-switch" role="tablist" aria-label="Choose label check type">
-      <button id="single-mode" class="mode-button active" type="button" role="tab" aria-selected="true" aria-controls="single-panel">One Label</button>
-      <button id="batch-mode" class="mode-button" type="button" role="tab" aria-selected="false" aria-controls="batch-panel" tabindex="-1">Batch</button>
-    </div>
+    <main>
+      <div id="message" class="message" role="alert" tabindex="-1"></div>
+      <div id="loading" class="loading" role="status" aria-live="polite">Matching application now.</div>
 
-    <section id="single-panel" class="panel" role="tabpanel" aria-labelledby="single-mode">
-      <h2 id="single-title">Check one label</h2>
-      <form id="single-form" novalidate>
-        <div class="form-grid">
+      <section id="table-view" class="view active" aria-labelledby="table-title">
+        <div class="view-head">
+          <div>
+            <h2 id="table-title">Applications</h2>
+            <p>Click a row to open the submitted application, label, and matching result.</p>
+          </div>
+          <button id="refresh-table" class="secondary-action" type="button">Refresh</button>
+        </div>
+        <section class="filter-panel" aria-label="Application table filters">
           <div class="field full">
-            <label for="image">Choose Label Photo</label>
-            <input id="image" name="image" type="file" accept="image/*" required aria-describedby="chosen-file" />
-            <div id="chosen-file" class="chosen-file" aria-live="polite">No photo chosen yet.</div>
-            <div id="single-preview" class="image-preview" hidden>
-              <img id="single-preview-image" alt="Selected label preview" />
+            <label for="application-search">Search Applications</label>
+            <input id="application-search" type="search" autocomplete="off" placeholder="Search by application, status, brand, image, or field text" />
+          </div>
+          <div class="filter-grid">
+            <div class="field">
+              <label for="status-filter">Status</label>
+              <select id="status-filter">
+                <option value="">All statuses</option>
+                <option value="NEEDS_CHECK">Needs Review</option>
+                <option value="ACCEPTED">Accepted</option>
+                <option value="REJECTED">Rejected</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="match-direction">Match Percent</label>
+              <select id="match-direction">
+                <option value="">Any match</option>
+                <option value="gte">At least</option>
+                <option value="lte">At most</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="match-percent">Percent</label>
+              <input id="match-percent" type="number" min="0" max="100" step="1" placeholder="0-100" />
+            </div>
+            <div class="field">
+              <label for="checked-from">Checked From</label>
+              <input id="checked-from" type="date" />
+            </div>
+            <div class="field">
+              <label for="checked-to">Checked To</label>
+              <input id="checked-to" type="date" />
+            </div>
+            <div class="field">
+              <label for="failed-direction">Failed Fields</label>
+              <select id="failed-direction">
+                <option value="">Any amount</option>
+                <option value="eq">Exactly</option>
+                <option value="gte">At least</option>
+                <option value="lte">At most</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="failed-count">Count</label>
+              <input id="failed-count" type="number" min="0" max="7" step="1" placeholder="0-7" />
+            </div>
+            <div class="filter-actions">
+              <button id="clear-filters" class="secondary-action" type="button">Clear Filters</button>
             </div>
           </div>
+          <p id="filter-summary" class="filter-summary" aria-live="polite"></p>
+        </section>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Application</th>
+                <th>Brand</th>
+                <th>Image</th>
+                <th>Status</th>
+                <th>Match</th>
+                <th>Failed Fields</th>
+                <th>Checked</th>
+              </tr>
+            </thead>
+            <tbody id="application-rows"></tbody>
+          </table>
+        </div>
+        <p id="empty-table" class="empty">No applications matched yet.</p>
+      </section>
 
-          <div class="field">
-            <label for="brand">Brand</label>
-            <input id="brand" name="brand" type="text" autocomplete="off" required />
-          </div>
-
-          <div class="field">
-            <label for="product-class">Class or Type</label>
-            <input id="product-class" name="product_class" type="text" autocomplete="off" required />
-          </div>
-
-          <div class="field">
-            <label for="producer">Producer</label>
-            <input id="producer" name="producer" type="text" autocomplete="off" required />
-          </div>
-
-          <div class="field">
-            <label for="country">Country</label>
-            <input id="country" name="country" type="text" autocomplete="off" required />
-          </div>
-
-          <div class="field">
-            <label for="abv">Alcohol %</label>
-            <input id="abv" name="abv" type="text" autocomplete="off" required />
-          </div>
-
-          <div class="field">
-            <label for="net-contents">Bottle Size</label>
-            <input id="net-contents" name="net_contents" type="text" autocomplete="off" required />
-          </div>
-
-          <div class="field full">
-            <label for="government-warning">Government Warning</label>
-            <textarea id="government-warning" name="government_warning" required></textarea>
+      <section id="upload-view" class="view" aria-labelledby="upload-title" hidden>
+        <div class="view-head">
+          <div>
+            <h2 id="upload-title">Upload Application</h2>
+            <p>Create one application package from company-submitted data and a label image.</p>
           </div>
         </div>
-
-        <button id="single-submit" class="primary-action" type="submit">Check Label</button>
-      </form>
-    </section>
-
-    <section id="batch-panel" class="panel hidden" role="tabpanel" aria-labelledby="batch-mode" hidden>
-      <h2 id="batch-title">Batch Label Check</h2>
-      <form id="batch-form" novalidate>
-        <div id="batch-list" class="batch-list"></div>
-        <div class="batch-actions">
-          <button id="add-label" class="secondary-action" type="button">Add Another Label</button>
-          <button id="batch-submit" class="primary-action" type="submit">Check All Labels</button>
+        <div class="upload-mode-switch" role="tablist" aria-label="Choose application data entry type">
+          <button id="manual-upload-mode" class="mode-button active" type="button" data-upload-mode="manual" role="tab" aria-selected="true">Enter Data</button>
+          <button id="json-upload-mode" class="mode-button" type="button" data-upload-mode="json" role="tab" aria-selected="false">Upload JSON</button>
         </div>
-      </form>
-    </section>
+        <form id="upload-form" novalidate>
+          <div class="form-grid">
+            <div id="manual-upload-fields" class="manual-fields full">
+            <div class="field">
+              <label for="label-image">Label Image</label>
+              <input id="label-image" name="image" type="file" accept="image/*" required />
+            </div>
+            <div class="field">
+              <label for="brand-name">Brand Name</label>
+              <input id="brand-name" name="brand_name" type="text" autocomplete="off" required />
+            </div>
+            <div class="field">
+              <label for="class-type-designation">Class/Type Designation</label>
+              <input id="class-type-designation" name="class_type_designation" type="text" autocomplete="off" required />
+            </div>
+            <div class="field">
+              <label for="alcohol-content">Alcohol Content</label>
+              <input id="alcohol-content" name="alcohol_content" type="text" autocomplete="off" required />
+            </div>
+            <div class="field">
+              <label for="net-contents">Net Contents</label>
+              <input id="net-contents" name="net_contents" type="text" autocomplete="off" required />
+            </div>
+            <div class="field full">
+              <label for="bottler-producer">Name and Address of Bottler/Producer</label>
+              <textarea id="bottler-producer" name="bottler_producer_name_address" required></textarea>
+            </div>
+            <div class="field">
+              <label for="country-origin">Country of Origin</label>
+              <input id="country-origin" name="country_of_origin" type="text" autocomplete="off" required />
+            </div>
+            <div class="field full">
+              <label for="government-warning">Government Health Warning Statement</label>
+              <textarea id="government-warning" name="government_health_warning_statement" required></textarea>
+            </div>
+            </div>
+            <div id="json-fields" class="field full" hidden>
+              <label for="application-json-file">Application JSON File</label>
+              <input id="application-json-file" name="application_json_file" type="file" accept="application/json,.json" />
+              <pre class="example-json compact">{
+  "image_filename": "label-001.jpg",
+  "application_data": {
+    "brand_name": "Vodka Premium",
+    "class_type_designation": "Vodka",
+    "alcohol_content": "40%",
+    "net_contents": "750 ml",
+    "bottler_producer_name_address": "Premium Distillery Inc.",
+    "country_of_origin": "Russia",
+    "government_health_warning_statement": "WARNING: CONTAINS ALCOHOL"
+  }
+}</pre>
+            </div>
+          </div>
+          <button id="upload-submit" class="primary-action" type="submit">Match Application</button>
+        </form>
+        <section id="upload-result-panel" class="inline-result-panel" aria-live="polite" hidden></section>
+      </section>
 
-    <div id="error-message" class="message" role="alert" tabindex="-1"></div>
-    <div id="loading-message" class="loading" role="status" aria-live="polite">Checking labels now.</div>
+      <section id="batch-view" class="view" aria-labelledby="batch-title" hidden>
+        <div class="view-head">
+          <div>
+            <h2 id="batch-title">Batch Upload</h2>
+            <p>Upload JSON application packages. Images are looked up by filename in the backend image store.</p>
+          </div>
+        </div>
+        <form id="batch-form" novalidate>
+          <div class="field">
+            <label for="batch-json">Application JSON File</label>
+            <input id="batch-json" name="application_file" type="file" accept="application/json,.json" required />
+          </div>
+          <pre class="example-json">[
+  {
+    "application_id": "APP-1B81036D",
+    "image_filename": "sample_label.jpg",
+    "application_data": {
+      "brand_name": "Vodka Premium",
+      "class_type_designation": "Vodka",
+      "alcohol_content": "40%",
+      "net_contents": "750 ml",
+      "bottler_producer_name_address": "Premium Distillery Inc.",
+      "country_of_origin": "Russia",
+      "government_health_warning_statement": "WARNING: CONTAINS ALCOHOL"
+    }
+  }
+]</pre>
+          <button id="batch-submit" class="primary-action" type="submit">Upload Batch</button>
+        </form>
+        <section id="batch-result-panel" class="inline-result-panel" aria-live="polite" hidden></section>
+      </section>
 
-    <section id="results" class="panel results" aria-live="polite" aria-labelledby="results-title" tabindex="-1">
-      <h2 id="results-title" class="sr-only">Results</h2>
-      <div id="verdict"></div>
-      <div id="summary"></div>
-      <div id="result-list" class="result-list"></div>
-      <div id="time" class="time"></div>
-    </section>
-  </main>
+      <section id="detail-view" class="detail-panel" aria-labelledby="detail-title" hidden>
+        <div class="view-head">
+          <div>
+            <h2 id="detail-title">Application Detail</h2>
+            <p id="detail-subtitle"></p>
+          </div>
+          <div class="detail-actions">
+            <button id="close-detail" class="secondary-action" type="button">Close Detail</button>
+            <button id="full-image-button" class="secondary-action" type="button">Open Full Image</button>
+          </div>
+        </div>
+        <div id="detail-content"></div>
+      </section>
+    </main>
+  </div>
 
   <script type="module" src="/static/app.js"></script>
-
 </body>
 </html>

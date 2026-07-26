@@ -314,6 +314,14 @@ class MockVisionService(VisionService):
             with Image.open(io.BytesIO(image_bytes)) as img:
                 img = img.convert("RGB")
                 corner = img.crop((0, 0, min(32, img.width), min(32, img.height)))
+                sample_marker = img.crop(
+                    (
+                        max(0, img.width - 32),
+                        0,
+                        img.width,
+                        min(32, img.height),
+                    )
+                )
                 center_left = max(0, (img.width // 2) - 16)
                 center_top = max(0, (img.height // 2) - 16)
                 center = img.crop(
@@ -325,12 +333,64 @@ class MockVisionService(VisionService):
                     )
                 )
                 corner_rgb = corner.resize((1, 1)).getpixel((0, 0))
+                sample_rgb = sample_marker.resize((1, 1)).getpixel((0, 0))
                 center_rgb = center.resize((1, 1)).getpixel((0, 0))
         except Exception:
             return None
 
+        sample_red, sample_green, sample_blue = sample_rgb
         red, green, blue = corner_rgb
         center_red, center_green, center_blue = center_rgb
+        sample_brightness = (sample_red + sample_green + sample_blue) / 3
+        center_brightness = (center_red + center_green + center_blue) / 3
+        sample_marker_is_distinct = abs(sample_brightness - center_brightness) > 30
+        sample_is_green = (
+            sample_green > 150 and sample_red < 130 and sample_blue < 130
+        ) or (
+            sample_marker_is_distinct and 75 <= sample_brightness < 125
+        )
+        if sample_is_green:
+            return ExtractedLabel(
+                brand="Northstar Reserve",
+                product_class="Red Wine",
+                producer="Northstar Test Winery, 100 Valley Road, Napa, CA",
+                country="United States",
+                abv="13.5%",
+                net_contents="750 ml",
+                government_warning="WARNING: CONTAINS ALCOHOL",
+            )
+
+        sample_is_yellow = (
+            sample_red > 150 and sample_green > 130 and sample_blue < 120
+        ) or (
+            sample_marker_is_distinct and 135 <= sample_brightness < 205
+        )
+        if sample_is_yellow:
+            return ExtractedLabel(
+                brand="Harbor Light Lager",
+                product_class="Beer",
+                producer="Harbor Light Brewing Co., 22 Pier Street, Boston, MA",
+                country="United States",
+                abv="5.2%",
+                net_contents="12 fl oz",
+                government_warning="WARNING: CONTAINS ALCOHOL",
+            )
+
+        sample_is_purple = (
+            sample_red > 120 and sample_blue > 120 and sample_green < 110
+        ) or (
+            sample_marker_is_distinct and sample_brightness < 75
+        )
+        if sample_is_purple:
+            return ExtractedLabel(
+                brand="Midnight Cactus",
+                product_class="Tequila",
+                producer="Desert Sun Spirits, Jalisco, Mexico",
+                country="Mexico",
+                abv="38%",
+                net_contents="375 ml",
+                government_warning="Warning: Contains Alcohol",
+            )
 
         corner_is_blue = blue > 150 and red < 120 and green < 140
         center_is_blue = center_blue > 150 and center_red < 120 and center_green < 140

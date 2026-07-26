@@ -1,0 +1,28 @@
+[
+  {
+    "application_id": "APP-B0000001",
+    "image_filename": "mock-approved-label.jpg",
+    "application_data": {
+      "brand_name": "Northstar Reserve",
+      "class_type_designation": "Red Wine",
+      "alcohol_content": "13.5%",
+      "net_contents": "750 ml",
+      "bottler_producer_name_address": "Northstar Test Winery, 100 Valley Road, Napa, CA",
+      "country_of_origin": "United States",
+      "government_health_warning_statement": "WARNING: CONTAINS ALCOHOL"
+    }
+  },
+  {
+    "application_id": "APP-B0000002",
+    "image_filename": "mock-one-field-label.jpg",
+    "application_data": {
+      "brand_name": "Harbor Light Lager",
+      "class_type_designation": "Beer",
+      "alcohol_content": "5.2%",
+      "net_contents": "12 fl oz",
+      "bottler_producer_name_address": "Harbor Light Brewing Co., 22 Pier Street, Boston, MA",
+      "country_of_origin": "United States",
+      "government_health_warning_statement": "WARNING: CONTAINS ALCOHOL"
+    }
+  }
+]

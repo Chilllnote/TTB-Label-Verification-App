@@ -1,7 +1,9 @@
 import asyncio
 import io
 import json
+import logging
 import time
+from pathlib import Path
 
 import pytest
 from fastapi import HTTPException
@@ -9,8 +11,22 @@ from PIL import Image
 
 from app import config
 from app.main import verify_batch_endpoint, verify_endpoint
+from app.main import (
+    _application_records,
+    _uploaded_image_bytes,
+    get_application,
+    get_application_image,
+    list_applications,
+    update_application_status_endpoint,
+    upload_application_batch_endpoint,
+    upload_application_endpoint,
+    upload_application_json_endpoint,
+)
 from app.models import ExtractedLabel
 from app.vision_service import MockVisionService, VisionServiceUnavailableError
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 class FakeUpload:
@@ -87,6 +103,22 @@ def matching_application_data() -> dict:
     }
 
 
+def matching_application_package(application_id="APP-00000001", image_filename="sample_label.jpg") -> dict:
+    return {
+        "application_id": application_id,
+        "image_filename": image_filename,
+        "application_data": {
+            "brand_name": "Vodka Premium",
+            "class_type_designation": "Vodka",
+            "bottler_producer_name_address": "Premium Distillery Inc.",
+            "country_of_origin": "Russia",
+            "alcohol_content": "40%",
+            "net_contents": "750 ml",
+            "government_health_warning_statement": "WARNING: CONTAINS ALCOHOL",
+        },
+    }
+
+
 def matching_extraction() -> ExtractedLabel:
     return ExtractedLabel(
         brand="Vodka Premium",
@@ -97,6 +129,12 @@ def matching_extraction() -> ExtractedLabel:
         net_contents="750 ml",
         government_warning="WARNING: CONTAINS ALCOHOL",
     )
+
+
+def warning_mismatch_extraction() -> ExtractedLabel:
+    extracted = matching_extraction()
+    extracted.government_warning = "Warning: Contains Alcohol"
+    return extracted
 
 
 def run(coro):
@@ -264,6 +302,248 @@ def test_verify_endpoint_maps_vision_failure_to_unreadable_photo_error():
     assert "could not read this photo" in exc_info.value.detail.lower()
 
 
+def test_upload_application_endpoint_adds_only_accepted_record():
+    _application_records.clear()
+    _uploaded_image_bytes.clear()
+
+    result = run(
+        upload_application_endpoint(
+            image=FakeUpload("new-label.jpg", make_jpeg_bytes()),
+            application=json.dumps(matching_application_package("APP-00000002", "new-label.jpg")),
+            vision_service=MockVisionService(),
+        )
+    )
+
+    assert result.application_id == "APP-00000002"
+    assert result.status == "ACCEPTED"
+    assert result.verification_result is not None
+    assert _application_records["APP-00000002"].status == "ACCEPTED"
+    assert _uploaded_image_bytes["new-label.jpg"][1] == "image/jpeg"
+
+
+def test_upload_application_verification_still_preprocesses_before_vision():
+    _application_records.clear()
+    _uploaded_image_bytes.clear()
+    service = CapturingVisionService()
+
+    completed = run(
+        upload_application_endpoint(
+            image=FakeUpload("new-label.png", make_image_bytes("PNG"), "image/png"),
+            application=json.dumps(matching_application_package("APP-00000003", "new-label.png")),
+            vision_service=service,
+        )
+    )
+
+    assert completed.status == "ACCEPTED"
+    assert service.image_bytes.startswith(b"\xff\xd8")
+    assert completed.verification_result.metrics.preprocessed_format == "JPEG"
+
+
+def test_upload_application_endpoint_uploads_mismatch_as_review_record():
+    _application_records.clear()
+    _uploaded_image_bytes.clear()
+
+    result = run(
+        upload_application_endpoint(
+            image=FakeUpload("bad-label.jpg", make_jpeg_bytes()),
+            application=json.dumps(matching_application_package("APP-00000004", "bad-label.jpg")),
+            vision_service=SequenceVisionService([warning_mismatch_extraction()]),
+        )
+    )
+
+    assert result.application_id == "APP-00000004"
+    assert result.status == "NEEDS_CHECK"
+    assert result.verification_result.failed_fields == ["government_warning"]
+    assert _application_records["APP-00000004"].status == "NEEDS_CHECK"
+    assert _uploaded_image_bytes["bad-label.jpg"][1] == "image/jpeg"
+
+
+def test_upload_application_batch_endpoint_uses_database_image_filename():
+    _application_records.clear()
+
+    result = run(
+        upload_application_batch_endpoint(
+            application_file=FakeUpload(
+                "applications.json",
+                json.dumps([matching_application_package("APP-00000005", "sample_label.jpg")]).encode("utf-8"),
+                "application/json",
+            ),
+            vision_service=MockVisionService(),
+        )
+    )
+
+    assert len(result) == 1
+    assert result[0].application_id == "APP-00000005"
+    assert result[0].image_filename == "sample_label.jpg"
+    assert result[0].status == "ACCEPTED"
+    assert _application_records["APP-00000005"].status == "ACCEPTED"
+
+
+def test_upload_application_json_endpoint_generates_application_id():
+    _application_records.clear()
+    package = matching_application_package("", "sample_label.jpg")
+    del package["application_id"]
+
+    result = run(
+        upload_application_json_endpoint(
+            application_file=FakeUpload(
+                "application.json",
+                json.dumps(package).encode("utf-8"),
+                "application/json",
+            ),
+            vision_service=MockVisionService(),
+        )
+    )
+
+    assert len(result.application_id) == len("APP-1B81036D")
+    assert result.application_id.startswith("APP-")
+    assert result.image_filename == "sample_label.jpg"
+    assert result.status == "ACCEPTED"
+    assert _application_records[result.application_id].status == "ACCEPTED"
+
+
+def test_upload_application_json_endpoint_rejects_invalid_application_id_shape():
+    _application_records.clear()
+    package = matching_application_package("APP-001", "sample_label.jpg")
+
+    with pytest.raises(HTTPException) as exc_info:
+        run(
+            upload_application_json_endpoint(
+                application_file=FakeUpload(
+                    "application.json",
+                    json.dumps(package).encode("utf-8"),
+                    "application/json",
+                ),
+                vision_service=MockVisionService(),
+            )
+        )
+
+    assert exc_info.value.status_code == 400
+    assert "application_id" in str(exc_info.value.detail)
+    assert "APP-1B81036D" in str(exc_info.value.detail)
+    assert _application_records == {}
+
+
+def test_upload_application_batch_endpoint_uploads_verification_mismatches():
+    _application_records.clear()
+
+    result = run(
+        upload_application_batch_endpoint(
+            application_file=FakeUpload(
+                "applications.json",
+                json.dumps(
+                    [
+                        matching_application_package("APP-00000006", "sample_label.jpg"),
+                        matching_application_package("APP-00000007", "sample_label.jpg"),
+                    ]
+                ).encode("utf-8"),
+                "application/json",
+            ),
+            vision_service=SequenceVisionService(
+                [matching_extraction(), warning_mismatch_extraction()]
+            ),
+        )
+    )
+
+    assert [record.application_id for record in result] == ["APP-00000006", "APP-00000007"]
+    assert [record.status for record in result] == ["ACCEPTED", "NEEDS_CHECK"]
+    assert _application_records["APP-00000006"].status == "ACCEPTED"
+    assert _application_records["APP-00000007"].status == "NEEDS_CHECK"
+
+
+def test_sample_batch_success_upload_uses_repo_images_with_mock_vision():
+    _application_records.clear()
+    sample_path = PROJECT_ROOT / "sample_JSON" / "batch_upload_success.json"
+
+    result = run(
+        upload_application_batch_endpoint(
+            application_file=FakeUpload(
+                "batch_upload_success.json",
+                sample_path.read_bytes(),
+                "application/json",
+            ),
+            vision_service=MockVisionService(),
+        )
+    )
+
+    assert [record.application_id for record in result] == [
+        "APP-B0000001",
+        "APP-B0000002",
+    ]
+    assert all(record.status == "ACCEPTED" for record in result)
+    assert _application_records["APP-B0000001"].status == "ACCEPTED"
+    assert _application_records["APP-B0000002"].status == "ACCEPTED"
+
+
+def test_sample_batch_failure_upload_reports_missing_image_only():
+    _application_records.clear()
+    sample_path = PROJECT_ROOT / "sample_JSON" / "batch_upload_failure.json"
+
+    with pytest.raises(HTTPException) as exc_info:
+        run(
+            upload_application_batch_endpoint(
+                application_file=FakeUpload(
+                    "batch_upload_failure.json",
+                    sample_path.read_bytes(),
+                    "application/json",
+                ),
+                vision_service=MockVisionService(),
+            )
+        )
+
+    assert exc_info.value.status_code == 400
+    assert _application_records == {}
+    failures = exc_info.value.detail["upload_failures"]
+    assert [failure["application_id"] for failure in failures] == ["APP-C0000002"]
+    assert failures[0]["status"] == "ERROR"
+    assert "not found" in failures[0]["error"].lower()
+
+
+def test_list_applications_loads_repo_mock_applications():
+    _application_records.clear()
+
+    result = run(list_applications())
+
+    assert {record.application_id for record in result} >= {
+        "APP-A0000001",
+        "APP-A0000002",
+        "APP-A0000003",
+    }
+    by_id = {record.application_id: record for record in result}
+    assert by_id["APP-A0000001"].status == "ACCEPTED"
+    assert by_id["APP-A0000001"].match_percentage == 100
+    assert by_id["APP-A0000002"].status == "NEEDS_CHECK"
+    assert by_id["APP-A0000002"].match_percentage == 86
+    assert by_id["APP-A0000003"].status == "REJECTED"
+    assert by_id["APP-A0000003"].match_percentage < 50
+
+
+def test_update_application_status_endpoint_changes_accepted_or_rejected_status():
+    _application_records.clear()
+    run(list_applications())
+
+    result = run(
+        update_application_status_endpoint(
+            "APP-A0000002",
+            {"status": "ACCEPTED"},
+        )
+    )
+
+    assert result.status == "ACCEPTED"
+    assert run(get_application("APP-A0000002")).status == "ACCEPTED"
+
+
+def test_get_application_image_serves_uploaded_image_bytes():
+    _uploaded_image_bytes.clear()
+    image_bytes = make_jpeg_bytes()
+    _uploaded_image_bytes["uploaded-label.jpg"] = (image_bytes, "image/jpeg")
+
+    response = run(get_application_image("uploaded-label.jpg"))
+
+    assert response.media_type == "image/jpeg"
+    assert response.body == image_bytes
+
+
 def test_verify_batch_endpoint_all_pass_summary_and_order():
     result = run(
         verify_batch_endpoint(
@@ -292,6 +572,35 @@ def test_verify_batch_endpoint_all_pass_summary_and_order():
         "label-c.jpg",
     ]
     assert all(item.status == "APPROVED" for item in result.results)
+
+
+def test_verify_batch_endpoint_allows_total_latency_over_five_seconds(monkeypatch, caplog):
+    ticks = {"value": 0.0}
+
+    def fake_perf_counter():
+        ticks["value"] += 0.2
+        return ticks["value"]
+
+    monkeypatch.setattr("app.main.time.perf_counter", fake_perf_counter)
+    caplog.set_level(logging.WARNING, logger="app.main")
+
+    result = run(
+        verify_batch_endpoint(
+            images=[
+                FakeUpload("label-a.jpg", make_jpeg_bytes()),
+                FakeUpload("label-b.jpg", make_jpeg_bytes()),
+                FakeUpload("label-c.jpg", make_jpeg_bytes()),
+            ],
+            application_data=json.dumps(
+                [matching_application_data(), matching_application_data(), matching_application_data()]
+            ),
+            vision_service=MockVisionService(),
+        )
+    )
+
+    assert result.latency_ms > 5000
+    assert result.summary.passed == 3
+    assert "Batch verification latency exceeded 5 second budget" not in caplog.text
 
 
 def test_verify_batch_endpoint_counts_needs_review():

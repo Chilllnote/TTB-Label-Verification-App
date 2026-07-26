@@ -1,0 +1,12 @@
+{
+  "image_filename": "mock-approved-label.jpg",
+  "application_data": {
+    "brand_name": "Northstar Reserve",
+    "class_type_designation": "Red Wine",
+    "alcohol_content": "13.5%",
+    "net_contents": "750 ml",
+    "bottler_producer_name_address": "Northstar Test Winery, 100 Valley Road, Napa, CA",
+    "country_of_origin": "United States",
+    "government_health_warning_statement": "WARNING: CONTAINS ALCOHOL"
+  }
+}

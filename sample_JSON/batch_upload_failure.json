@@ -1,0 +1,28 @@
+[
+  {
+    "application_id": "APP-C0000001",
+    "image_filename": "mock-red-label.jpg",
+    "application_data": {
+      "brand_name": "Golden River Whiskey",
+      "class_type_designation": "Whiskey",
+      "alcohol_content": "45%",
+      "net_contents": "750 ml",
+      "bottler_producer_name_address": "Golden River Distilling, Louisville, KY",
+      "country_of_origin": "United States",
+      "government_health_warning_statement": "WARNING: CONTAINS ALCOHOL"
+    }
+  },
+  {
+    "application_id": "APP-C0000002",
+    "image_filename": "missing-label-image.jpg",
+    "application_data": {
+      "brand_name": "Missing Image Test",
+      "class_type_designation": "Vodka",
+      "alcohol_content": "40%",
+      "net_contents": "750 ml",
+      "bottler_producer_name_address": "Missing Image Distillery, 1 No File Road, Austin, TX",
+      "country_of_origin": "United States",
+      "government_health_warning_statement": "WARNING: CONTAINS ALCOHOL"
+    }
+  }
+]

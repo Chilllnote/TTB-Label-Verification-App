@@ -1,31 +1,58 @@
 """Pydantic models for TTB Label Verification."""
 
+import re
 from typing import Literal, Optional
+from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+
+APPLICATION_ID_PATTERN = re.compile(r"^APP-[0-9A-F]{8}$")
 
 
 class ApplicationData(BaseModel):
     """Expected values from the application/submission."""
-    
+
     model_config = ConfigDict(populate_by_name=True)
 
-    brand: str
-    product_class: str = Field(..., alias="class")
-    producer: str
-    country: str
-    abv: str
+    brand_name: str
+    class_type_designation: str
+    alcohol_content: str
     net_contents: str
-    government_warning: str
+    bottler_producer_name_address: str
+    country_of_origin: str
+    government_health_warning_statement: str
+
+    @model_validator(mode="before")
+    @classmethod
+    def accept_legacy_keys(cls, value):
+        """Accept the old UI/API keys while exposing the application-package shape."""
+        if not isinstance(value, dict):
+            return value
+
+        aliases = {
+            "brand": "brand_name",
+            "class": "class_type_designation",
+            "product_class": "class_type_designation",
+            "abv": "alcohol_content",
+            "producer": "bottler_producer_name_address",
+            "country": "country_of_origin",
+            "government_warning": "government_health_warning_statement",
+        }
+        normalized = dict(value)
+        for old_key, new_key in aliases.items():
+            if new_key not in normalized and old_key in normalized:
+                normalized[new_key] = normalized[old_key]
+        return normalized
 
     @field_validator(
-        "brand",
-        "product_class",
-        "producer",
-        "country",
-        "abv",
+        "brand_name",
+        "class_type_designation",
+        "alcohol_content",
         "net_contents",
-        "government_warning",
+        "bottler_producer_name_address",
+        "country_of_origin",
+        "government_health_warning_statement",
         mode="before",
     )
     @classmethod
@@ -41,6 +68,30 @@ class ApplicationData(BaseModel):
             raise ValueError("Field cannot be blank")
 
         return value
+
+    @property
+    def brand(self) -> str:
+        return self.brand_name
+
+    @property
+    def product_class(self) -> str:
+        return self.class_type_designation
+
+    @property
+    def producer(self) -> str:
+        return self.bottler_producer_name_address
+
+    @property
+    def country(self) -> str:
+        return self.country_of_origin
+
+    @property
+    def abv(self) -> str:
+        return self.alcohol_content
+
+    @property
+    def government_warning(self) -> str:
+        return self.government_health_warning_statement
 
 
 class ExtractedLabel(BaseModel):
@@ -131,3 +182,59 @@ class BatchVerificationResult(BaseModel):
     summary: BatchSummary
     results: list[BatchItemResult]
     latency_ms: float
+
+
+class ApplicationPackage(BaseModel):
+    """One submitted application package for matching."""
+
+    application_id: str
+    image_filename: str
+    application_data: ApplicationData
+
+    @model_validator(mode="before")
+    @classmethod
+    def create_application_id(cls, value):
+        if isinstance(value, dict) and not str(value.get("application_id") or "").strip():
+            value = dict(value)
+            value["application_id"] = f"APP-{uuid4().hex[:8].upper()}"
+        return value
+
+    @field_validator("application_id", mode="before")
+    @classmethod
+    def require_application_id_shape(cls, value):
+        if value is None:
+            raise ValueError("Field is required")
+        if not isinstance(value, str):
+            raise ValueError("Field must be text")
+        value = value.strip()
+        if not value:
+            raise ValueError("Field cannot be blank")
+        if not APPLICATION_ID_PATTERN.fullmatch(value):
+            raise ValueError("Application ID must look like APP-1B81036D")
+        return value
+
+    @field_validator("image_filename", mode="before")
+    @classmethod
+    def require_non_blank_image_filename(cls, value):
+        if value is None:
+            raise ValueError("Field is required")
+        if not isinstance(value, str):
+            raise ValueError("Field must be text")
+        value = value.strip()
+        if not value:
+            raise ValueError("Field cannot be blank")
+        return value
+
+
+class ApplicationRecord(BaseModel):
+    """In-memory application record shown in the table/detail views."""
+
+    application_id: str
+    image_filename: str
+    status: Literal["PENDING", "ACCEPTED", "NEEDS_CHECK", "REJECTED", "ERROR"]
+    application_data: ApplicationData
+    extracted_data: Optional[ExtractedLabel] = None
+    verification_result: Optional[VerificationResult] = None
+    match_percentage: Optional[int] = None
+    error: Optional[str] = None
+    checked_at: Optional[str] = None
