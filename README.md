@@ -122,7 +122,11 @@ The UI performs the first JSON gate with vendored Zod from `frontend/vendor/zod/
 - Plain HTML/CSS/JavaScript frontend
 - Railway deployment
 
+<<<<<<< HEAD
 The real vision model is not hardcoded in the app. It is configured with `OPENAI_VISION_MODEL` and used by `OpenAIVisionService`.
+=======
+Exact vision model: `gpt-5.4-nano`, configured by `OPENAI_VISION_MODEL` and used by `OpenAIVisionService`. On July 12, 2026, this model was checked against OpenAI's current model documentation; the GPT-5.4-nano page lists text and image input, text output, Structured Outputs support, and the `gpt-5.4-nano` alias/snapshot family.
+>>>>>>> a5c10696e04ff4e1bacf9be1f0014823d7a71508
 
 ## Local Setup
 
@@ -171,6 +175,7 @@ Open:
 | --- | --- | --- |
 | `USE_MOCK_VISION` | Use deterministic mock extraction instead of OpenAI. | `false` unless set |
 | `OPENAI_API_KEY` | Required only for real OpenAI vision mode. | unset |
+<<<<<<< HEAD
 | `OPENAI_VISION_MODEL` | Vision model for real OpenAI mode. | required for real mode |
 | `OPENAI_TIMEOUT_SECONDS` | OpenAI request timeout. | required for real mode |
 | `OPENAI_IMAGE_DETAIL` | OpenAI image detail setting. | required for real mode |
@@ -180,6 +185,17 @@ Open:
 | `PREPROCESS_THRESHOLD` | Optional black/white threshold mode: `off`, `binary`, or `adaptive`. | required |
 | `PREPROCESS_CONTRAST` | Apply light contrast/sharpening before threshold-capable preprocessing. | required |
 | `BATCH_CONCURRENCY` | Max concurrent batch item checks. | required |
+=======
+| `OPENAI_VISION_MODEL` | Vision model for real OpenAI mode. | `gpt-5.4-nano` |
+| `OPENAI_TIMEOUT_SECONDS` | OpenAI request timeout. | `20` |
+| `OPENAI_IMAGE_DETAIL` | OpenAI image detail setting. | `high` |
+| `PREPROCESS_MAX_DIMENSION` | Long-edge image resize target. Images are only downscaled, never upscaled. | `1024` |
+| `PREPROCESS_JPEG_QUALITY` | JPEG quality after preprocessing. | `70` |
+| `PREPROCESS_GRAYSCALE` | Convert image to grayscale before sending to vision. | `true` |
+| `PREPROCESS_THRESHOLD` | Optional black/white threshold mode: `off`, `binary`, or `adaptive`. | `off` |
+| `PREPROCESS_CONTRAST` | Apply light contrast/sharpening before threshold-capable preprocessing. | `true` |
+| `BATCH_CONCURRENCY` | Max concurrent batch item checks. | `3` |
+>>>>>>> a5c10696e04ff4e1bacf9be1f0014823d7a71508
 
 Secrets must stay in local `.env` files or deployment environment variables. Do not commit real API keys.
 
